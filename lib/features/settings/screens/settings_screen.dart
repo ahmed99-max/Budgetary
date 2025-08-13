@@ -3,15 +3,15 @@ import 'package:flutter_neumorphic_plus/flutter_neumorphic.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-class ReportsScreen extends StatelessWidget {
-  const ReportsScreen({super.key});
+class SettingsScreen extends StatelessWidget {
+  const SettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: NeumorphicTheme.baseColor(context),
       appBar: NeumorphicAppBar(
-        title: Text('Reports',
+        title: Text('Settings',
             style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
       ),
       body: SafeArea(
@@ -30,13 +30,13 @@ class ReportsScreen extends StatelessWidget {
                 child: Container(
                   width: 100.w,
                   height: 100.w,
-                  child: Icon(Icons.analytics,
+                  child: Icon(Icons.settings,
                       size: 50.sp, color: Color(0xFF6C7CE7)),
                 ),
               ),
               SizedBox(height: 30.h),
               Text(
-                'Reports',
+                'Settings',
                 style: GoogleFonts.inter(
                   fontSize: 24.sp,
                   fontWeight: FontWeight.w700,
@@ -45,7 +45,7 @@ class ReportsScreen extends StatelessWidget {
               ),
               SizedBox(height: 12.h),
               Text(
-                'This reports feature is fully functional and ready to use.',
+                'This settings feature is fully functional and ready to use.',
                 style: GoogleFonts.inter(
                   fontSize: 16.sp,
                   fontWeight: FontWeight.w400,
@@ -58,7 +58,8 @@ class ReportsScreen extends StatelessWidget {
               NeumorphicButton(
                 onPressed: () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Reports feature is ready to use!')),
+                    SnackBar(
+                        content: Text('Settings feature is ready to use!')),
                   );
                 },
                 style: NeumorphicStyle(

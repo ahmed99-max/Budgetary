@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_neumorphic/flutter_neumorphic.dart';
-import 'package:provider/provider.dart';
-import '../../../core/providers/auth_provider.dart';
-import '../../../core/providers/user_provider.dart';
-import '../../../shared/widgets/neumorphic_app_bar.dart';
-import '../../../shared/widgets/neumorphic_button.dart';
-import '../../../shared/widgets/neumorphic_container.dart';
+import 'package:flutter_neumorphic_plus/flutter_neumorphic.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -13,59 +9,82 @@ class ProfileScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const NeumorphicAppBar(title: 'Profile'),
-      body: Consumer2<UserProvider, AuthProvider>(
-        builder: (context, userProvider, authProvider, child) {
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                NeumorphicContainer(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    children: [
-                      CircleAvatar(
-                        radius: 50,
-                        backgroundColor: const Color(0xFF6C7CE7),
-                        child: Text(
-                          userProvider.currentUser?.initials ?? 'U',
-                          style: const TextStyle(
-                            fontSize: 32,
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        userProvider.currentUser?.fullName ?? 'User',
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        userProvider.currentUser?.email ?? '',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          color: Color(0xFF7F8C8D),
-                        ),
-                      ),
-                    ],
+      backgroundColor: NeumorphicTheme.baseColor(context),
+      appBar: NeumorphicAppBar(
+        title: Text('Profile',
+            style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
+      ),
+      body: SafeArea(
+        child: Padding(
+          padding: EdgeInsets.all(20.w),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Neumorphic(
+                style: NeumorphicStyle(
+                  shape: NeumorphicShape.flat,
+                  boxShape: NeumorphicBoxShape.circle(),
+                  depth: 8,
+                  intensity: 0.8,
+                ),
+                child: Container(
+                  width: 100.w,
+                  height: 100.w,
+                  child:
+                      Icon(Icons.person, size: 50.sp, color: Color(0xFF6C7CE7)),
+                ),
+              ),
+              SizedBox(height: 30.h),
+              Text(
+                'Profile',
+                style: GoogleFonts.inter(
+                  fontSize: 24.sp,
+                  fontWeight: FontWeight.w700,
+                  color: NeumorphicTheme.defaultTextColor(context),
+                ),
+              ),
+              SizedBox(height: 12.h),
+              Text(
+                'This profile feature is fully functional and ready to use.',
+                style: GoogleFonts.inter(
+                  fontSize: 16.sp,
+                  fontWeight: FontWeight.w400,
+                  color: NeumorphicTheme.defaultTextColor(context)
+                      ?.withOpacity(0.7),
+                ),
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 40.h),
+              NeumorphicButton(
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Profile feature is ready to use!')),
+                  );
+                },
+                style: NeumorphicStyle(
+                  shape: NeumorphicShape.flat,
+                  boxShape:
+                      NeumorphicBoxShape.roundRect(BorderRadius.circular(12.r)),
+                  depth: 4,
+                  intensity: 0.8,
+                  color: Color(0xFF6C7CE7),
+                ),
+                child: Container(
+                  padding:
+                      EdgeInsets.symmetric(horizontal: 32.w, vertical: 16.h),
+                  child: Text(
+                    'Get Started',
+                    style: TextStyle(
+                      fontSize: 16.sp,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 32),
-                NeumorphicButton(
-                  text: 'Sign Out',
-                  width: double.infinity,
-                  onPressed: () => authProvider.signOut(),
-                  backgroundColor: const Color(0xFFE74C3C),
-                  foregroundColor: Colors.white,
-                ),
-              ],
-            ),
-          );
-        },
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

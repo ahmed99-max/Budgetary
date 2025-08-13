@@ -6,30 +6,30 @@ class ThemeProvider with ChangeNotifier {
   static const String _themeKey = 'theme_mode';
 
   bool get isDarkMode => _isDarkMode;
+  ThemeMode get themeMode => _isDarkMode ? ThemeMode.dark : ThemeMode.light;
 
   ThemeProvider() {
     _loadThemeFromPrefs();
   }
 
   void _loadThemeFromPrefs() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    _isDarkMode = prefs.getBool(_themeKey) ?? false;
-    notifyListeners();
-  }
-
-  void toggleTheme() async {
-    _isDarkMode = !_isDarkMode;
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    prefs.setBool(_themeKey, _isDarkMode);
-    notifyListeners();
-  }
-
-  void setTheme(bool isDark) async {
-    if (_isDarkMode != isDark) {
-      _isDarkMode = isDark;
+    try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
-      prefs.setBool(_themeKey, _isDarkMode);
+      _isDarkMode = prefs.getBool(_themeKey) ?? false;
       notifyListeners();
+    } catch (e) {
+      print('Error loading theme preferences: \$e');
     }
+  }
+
+  Future<void> toggleTheme() async {
+    _isDarkMode = !_isDarkMode;
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_themeKey, _isDarkMode);
+    } catch (e) {
+      print('Error saving theme preference: \$e');
+    }
+    notifyListeners();
   }
 }

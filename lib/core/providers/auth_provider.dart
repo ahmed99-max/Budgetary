@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import '../services/auth_service.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'dart:developer' as developer;
 
 class AuthProvider with ChangeNotifier {
-  final AuthService _authService = AuthService();
+  final FirebaseAuth _auth = FirebaseAuth.instance;
 
   User? _user;
   bool _isLoading = false;
@@ -16,46 +16,73 @@ class AuthProvider with ChangeNotifier {
   bool get isAuthenticated => _user != null;
 
   AuthProvider() {
-    _user = _authService.currentUser;
-    _authService.authStateChanges.listen((user) {
+    _initialize();
+  }
+
+  void _initialize() {
+    _auth.authStateChanges().listen((User? user) {
       _user = user;
       notifyListeners();
     });
+    _initGoogleSignIn();
   }
 
-  void clearError() {
-    _errorMessage = null;
+  Future<void> _initGoogleSignIn() async {
+    try {
+      await GoogleSignIn.instance.initialize(
+          // Provide your OAuth web client ID if necessary:
+          // clientId: 'YOUR_WEB_CLIENT_ID.apps.googleusercontent.com',
+          // Optionally:
+          // serverClientId: 'YOUR_SERVER_CLIENT_ID.apps.googleusercontent.com',
+          );
+    } catch (e) {
+      developer.log('GoogleSignIn init error: $e');
+    }
+  }
+
+  void _setLoading(bool value) {
+    _isLoading = value;
     notifyListeners();
   }
 
-  Future<bool> signUpWithEmail(String email, String password) async {
+  void _setError(String? message) {
+    _errorMessage = message;
+    notifyListeners();
+  }
+
+  Future<bool> signInWithEmail(String email, String password) async {
+    _setLoading(true);
+    _setError(null);
     try {
-      _setLoading(true);
-      final userCredential = await _authService.signUpWithEmail(email, password);
-      final user = userCredential.user;
-      if (user != null) {
-        await _createInitialProfile(user.uid, user.email ?? '');
-        _errorMessage = null;
-        return true;
-      }
-      _errorMessage = 'User creation failed';
-      return false;
-    } catch (e) {
-      _errorMessage = e.toString();
+      await _auth.signInWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+      return true;
+    } on FirebaseAuthException catch (e) {
+      developer.log('Email sign-in error: ${e.code}');
+      _setError(_mapFirebaseAuthError(e.code));
       return false;
     } finally {
       _setLoading(false);
     }
   }
 
-  Future<bool> signInWithEmail(String email, String password) async {
+  Future<bool> signUpWithEmail(
+      String email, String password, String displayName) async {
+    _setLoading(true);
+    _setError(null);
     try {
-      _setLoading(true);
-      await _authService.signInWithEmail(email, password);
-      _errorMessage = null;
+      final cred = await _auth.createUserWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+      await cred.user?.updateDisplayName(displayName);
+      await cred.user?.reload();
       return true;
-    } catch (e) {
-      _errorMessage = e.toString();
+    } on FirebaseAuthException catch (e) {
+      developer.log('Email sign-up error: ${e.code}');
+      _setError(_mapFirebaseAuthError(e.code));
       return false;
     } finally {
       _setLoading(false);
@@ -63,33 +90,44 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<bool> signInWithGoogle() async {
+    _setLoading(true);
+    _setError(null);
     try {
-      _setLoading(true);
-      final userCredential = await _authService.signInWithGoogle();
-      final user = userCredential?.user;
-      if (user != null) {
-        await _createInitialProfile(user.uid, user.email ?? '');
-        _errorMessage = null;
-        return true;
+      if (!GoogleSignIn.instance.supportsAuthenticate()) {
+        _setError('Google Sign-In not supported on this platform.');
+        return false;
       }
-      _errorMessage = 'Google sign-in failed';
-      return false;
-    } catch (e) {
-      _errorMessage = e.toString();
-      return false;
-    } finally {
-      _setLoading(false);
-    }
-  }
 
-  Future<bool> resetPassword(String email) async {
-    try {
-      _setLoading(true);
-      await _authService.resetPassword(email);
-      _errorMessage = null;
+      // Initiate interactive sign-in
+      final account = await GoogleSignIn.instance.authenticate(
+        scopeHint: ['email'],
+      );
+      if (account == null) {
+        _setError('Google sign-in cancelled.');
+        return false;
+      }
+
+      final googleAuth = await account.authentication;
+
+      if (googleAuth.idToken == null) {
+        _setError('Missing ID token from Google.');
+        return false;
+      }
+
+      final credential = GoogleAuthProvider.credential(
+        idToken: googleAuth.idToken,
+        // Drop accessToken since it's no longer reliably available
+      );
+
+      await _auth.signInWithCredential(credential);
       return true;
+    } on FirebaseAuthException catch (e) {
+      developer.log('Google sign-in error: ${e.code}');
+      _setError(_mapFirebaseAuthError(e.code));
+      return false;
     } catch (e) {
-      _errorMessage = e.toString();
+      developer.log('Google sign-in unknown error: $e');
+      _setError('Google sign-in failed.');
       return false;
     } finally {
       _setLoading(false);
@@ -97,41 +135,40 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<void> signOut() async {
+    _setLoading(true);
+    _setError(null);
     try {
-      _setLoading(true);
-      await _authService.signOut();
-      _errorMessage = null;
+      await Future.wait([
+        _auth.signOut(),
+        GoogleSignIn.instance.signOut(),
+      ]);
     } catch (e) {
-      _errorMessage = e.toString();
+      developer.log('Sign out error: $e');
     } finally {
+      _user = null;
       _setLoading(false);
+      notifyListeners();
     }
   }
 
-  Future<void> _createInitialProfile(String uid, String email) async {
-    try {
-      final docRef = FirebaseFirestore.instance.collection('users').doc(uid);
-      final doc = await docRef.get();
-      if (!doc.exists) {
-        await docRef.set({
-          'email': email,
-          'createdAt': FieldValue.serverTimestamp(),
-          'firstName': '',
-          'lastName': '',
-          'totalIncome': 0.0,
-          'totalExpenses': 0.0,
-          'totalSavings': 0.0,
-          'currency': 'USD',
-          'isProfileComplete': false,
-        });
-      }
-    } catch (e) {
-      debugPrint('Error creating initial profile: $e');
+  String _mapFirebaseAuthError(String code) {
+    switch (code) {
+      case 'user-not-found':
+        return 'No user found with this email.';
+      case 'wrong-password':
+        return 'Incorrect password.';
+      case 'email-already-in-use':
+        return 'An account already exists with this email.';
+      case 'weak-password':
+        return 'Password is too weak.';
+      case 'invalid-email':
+        return 'Invalid email address.';
+      case 'user-disabled':
+        return 'This user has been disabled.';
+      case 'operation-not-allowed':
+        return 'Operation not allowed.';
+      default:
+        return 'Authentication error. Please try again.';
     }
-  }
-
-  void _setLoading(bool loading) {
-    _isLoading = loading;
-    notifyListeners();
   }
 }

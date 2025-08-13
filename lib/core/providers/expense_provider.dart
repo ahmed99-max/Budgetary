@@ -1,34 +1,47 @@
 import 'package:flutter/material.dart';
-import '../../models/expense_model.dart';
+
+class ExpenseModel {
+  final String id;
+  final String title;
+  final double amount;
+  final String category;
+  final DateTime date;
+  final String description;
+
+  ExpenseModel({required this.id, required this.title, required this.amount, required this.category, required this.date, this.description = ''});
+}
 
 class ExpenseProvider with ChangeNotifier {
-  List<ExpenseModel> _expenses = [];
-  bool _isLoading = false;
-  String? _errorMessage;
+  final List<ExpenseModel> _expenses = [
+    ExpenseModel(id: '1', title: 'Grocery Shopping', amount: 85.50, category: 'Food & Dining', date: DateTime.now().subtract(Duration(days: 1)), description: 'Weekly groceries'),
+    ExpenseModel(id: '2', title: 'Gas Station', amount: 45.20, category: 'Transportation', date: DateTime.now().subtract(Duration(days: 2)), description: 'Fuel for car'),
+    ExpenseModel(id: '3', title: 'Coffee Shop', amount: 12.75, category: 'Food & Dining', date: DateTime.now().subtract(Duration(days: 3)), description: 'Morning coffee'),
+    ExpenseModel(id: '4', title: 'Movie Tickets', amount: 28.00, category: 'Entertainment', date: DateTime.now().subtract(Duration(days: 4)), description: 'Weekend movie'),
+    ExpenseModel(id: '5', title: 'Electric Bill', amount: 125.30, category: 'Bills', date: DateTime.now().subtract(Duration(days: 5)), description: 'Monthly electricity'),
+  ];
 
   List<ExpenseModel> get expenses => _expenses;
-  List<ExpenseModel> get recentExpenses => _expenses.take(10).toList();
-  bool get isLoading => _isLoading;
-  String? get errorMessage => _errorMessage;
-
-  double get monthlyTotal => _expenses
-      .where((e) => e.date?.month == DateTime.now().month)
-      .fold(0.0, (sum, e) => sum + (e.amount ?? 0));
-
-  Future<void> loadExpenses() async {
-    _setLoading(true);
-    try {
-      // TODO: Implement expense loading from Firebase
-      await Future.delayed(const Duration(milliseconds: 500));
-      _errorMessage = null;
-    } catch (e) {
-      _errorMessage = e.toString();
-    }
-    _setLoading(false);
+  double get totalExpenses => _expenses.fold(0, (sum, expense) => sum + expense.amount);
+  double get monthlyTotal {
+    final currentMonth = DateTime.now().month;
+    return _expenses.where((e) => e.date.month == currentMonth).fold(0.0, (sum, e) => sum + e.amount);
   }
 
-  void _setLoading(bool loading) {
-    _isLoading = loading;
+  void addExpense(ExpenseModel expense) {
+    _expenses.insert(0, expense);
     notifyListeners();
+  }
+
+  void removeExpense(String id) {
+    _expenses.removeWhere((expense) => expense.id == id);
+    notifyListeners();
+  }
+
+  void updateExpense(String id, ExpenseModel updatedExpense) {
+    final index = _expenses.indexWhere((e) => e.id == id);
+    if (index != -1) {
+      _expenses[index] = updatedExpense;
+      notifyListeners();
+    }
   }
 }
