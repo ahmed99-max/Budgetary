@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_neumorphic_plus/flutter_neumorphic.dart'; // Updated import
+import 'package:flutter_neumorphic_plus/flutter_neumorphic.dart'; // Updated to the maintained package
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 
@@ -26,6 +26,7 @@ class MyApp extends StatelessWidget {
               themeMode:
                   themeProvider.isDarkMode ? ThemeMode.dark : ThemeMode.light,
 
+              // Wrap the app with NeumorphicTheme for styling
               builder: (context, routerWidget) {
                 return NeumorphicTheme(
                   theme: NeumorphicThemeData(
@@ -49,38 +50,118 @@ class MyApp extends StatelessWidget {
                 );
               },
 
-              // Light Theme (Material 3 compatible)
+              // Light Theme with Material 3 support
               theme: ThemeData(
                 useMaterial3: true,
                 brightness: Brightness.light,
                 primarySwatch: Colors.indigo,
+                fontFamily: 'Inter', // Using local font
                 scaffoldBackgroundColor: const Color(0xFFE0E5EC),
-                colorScheme: ColorScheme.fromSeed(
-                  seedColor: const Color(0xFF6C7CE7),
-                  brightness: Brightness.light,
+                colorScheme: ColorScheme.light(
+                  primary: const Color(0xFF6C7CE7),
+                  secondary: const Color(0xFF6C7CE7),
                   surface: const Color(0xFFE0E5EC),
+                  background: const Color(0xFFE0E5EC),
                 ),
-                textTheme: Theme.of(context).textTheme.apply(
-                      bodyColor: const Color(0xFF2C3E50),
-                      displayColor: const Color(0xFF2C3E50),
-                    ),
+                textTheme: const TextTheme(
+                  displayLarge: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF2C3E50)),
+                  displayMedium: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF2C3E50)),
+                  displaySmall: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF2C3E50)),
+                  headlineLarge: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF2C3E50)),
+                  headlineMedium: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF2C3E50)),
+                  titleLarge: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF2C3E50)),
+                  titleMedium: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF2C3E50)),
+                  bodyLarge: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w400,
+                      color: Color(0xFF2C3E50)),
+                  bodyMedium: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      color: Color(0xFF7F8C8D)),
+                  labelLarge: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF2C3E50)),
+                ),
               ),
 
-              // Dark Theme (Material 3 compatible)
+              // Dark Theme with Material 3 support
               darkTheme: ThemeData(
                 useMaterial3: true,
                 brightness: Brightness.dark,
                 primarySwatch: Colors.indigo,
+                fontFamily: 'Inter', // Using local font
                 scaffoldBackgroundColor: const Color(0xFF2C3E50),
-                colorScheme: ColorScheme.fromSeed(
-                  seedColor: const Color(0xFF6C7CE7),
-                  brightness: Brightness.dark,
+                colorScheme: ColorScheme.dark(
+                  primary: const Color(0xFF6C7CE7),
+                  secondary: const Color(0xFF6C7CE7),
                   surface: const Color(0xFF2C3E50),
+                  background: const Color(0xFF2C3E50),
                 ),
-                textTheme: Theme.of(context).primaryTextTheme.apply(
-                      bodyColor: const Color(0xFFECF0F1),
-                      displayColor: const Color(0xFFECF0F1),
-                    ),
+                textTheme: const TextTheme(
+                  displayLarge: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFFECF0F1)),
+                  displayMedium: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFFECF0F1)),
+                  displaySmall: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFFECF0F1)),
+                  headlineLarge: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFFECF0F1)),
+                  headlineMedium: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFFECF0F1)),
+                  titleLarge: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFFECF0F1)),
+                  titleMedium: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFFECF0F1)),
+                  bodyLarge: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w400,
+                      color: Color(0xFFECF0F1)),
+                  bodyMedium: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                      color: Color(0xFFBDC3C7)),
+                  labelLarge: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFFECF0F1)),
+                ),
               ),
             );
           },

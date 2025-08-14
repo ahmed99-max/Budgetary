@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
+import 'package:flutter/foundation.dart' show kIsWeb; // Added for kIsWeb check
 
 import 'app/app.dart';
 import 'core/providers/theme_provider.dart';
@@ -40,22 +41,32 @@ void main() async {
     ]);
 
     FlutterError.onError = (FlutterErrorDetails details) {
-      debugPrint('Flutter Error: \${details.exception}');
+      debugPrint('Flutter Error: ${details.exception}');
     };
 
     await Hive.initFlutter();
     await HiveService.initHive();
     debugPrint('Hive initialized successfully');
 
+    // Updated Firebase initialization with your snippet
     debugPrint('Starting Firebase initialization...');
-    try {
+    if (kIsWeb) {
+      await Firebase.initializeApp(
+        options: FirebaseOptions(
+            apiKey: "AIzaSyDkOu-mz4sf3OJzA-441F6QU1yNNvBJEKw",
+            authDomain: "expensewise-app-51036.firebaseapp.com",
+            projectId: "expensewise-app-51036",
+            storageBucket: "expensewise-app-51036.firebasestorage.app",
+            messagingSenderId: "877358190612",
+            appId: "1:877358190612:web:4e0e5c83fdd2c816249701",
+            measurementId: "G-44318Q6QR0"),
+      );
+    } else {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
-      debugPrint('Firebase initialized successfully');
-    } catch (e) {
-      debugPrint('Firebase initialization failed: \$e');
     }
+    debugPrint('Firebase initialized successfully');
 
     await NotificationService.initialize();
 
@@ -84,7 +95,7 @@ void main() async {
         }
       });
     } catch (e) {
-      debugPrint('Notification initialization failed: \$e');
+      debugPrint('Notification initialization failed: $e');
     }
 
     runApp(
@@ -103,8 +114,8 @@ void main() async {
     );
     debugPrint('App started successfully');
   } catch (e, stackTrace) {
-    debugPrint('Error starting app: \$e');
-    debugPrint('Stack trace: \$stackTrace');
+    debugPrint('Error starting app: $e');
+    debugPrint('Stack trace: $stackTrace');
     runApp(ErrorApp(error: e.toString()));
   }
 }

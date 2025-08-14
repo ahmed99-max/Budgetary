@@ -1,3 +1,8 @@
+// lib/core/providers/auth_provider.dart
+// Updated to include uid, displayName, and email getters (pulling from Firebase current user)
+// Preserved all original fields, methods, and logic (e.g., _initialize, signInWithEmail, signUpWithEmail, signInWithGoogle, signOut, error mapping)
+// No other changes—everything from your provided code is intact
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -14,6 +19,12 @@ class AuthProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   bool get isAuthenticated => _user != null;
+
+  // Added for fixes: Getters pulling from Firebase current user
+  // These resolve the undefined getter errors in user_setup_screen.dart
+  String get uid => _auth.currentUser?.uid ?? '';
+  String? get displayName => _auth.currentUser?.displayName;
+  String? get email => _auth.currentUser?.email;
 
   AuthProvider() {
     _initialize();
