@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import '../../features/expenses/data/expense_repository.dart';
-import '../../shared/models/expense_model.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+import '../models/expense_model.dart';
+import '../../core/services/firebase_service.dart';
 
 class ExpenseProvider extends ChangeNotifier {
-  final _repo = ExpenseRepository();
-
   List<ExpenseModel> _expenses = [];
-  bool _isLoading = true;
+  bool _isLoading = false;
   String? _errorMessage;
 
   // Getters
@@ -17,7 +17,6 @@ class ExpenseProvider extends ChangeNotifier {
   // Calculated getters
   double get totalExpenses =>
       _expenses.fold(0, (sum, expense) => sum + expense.amount);
-
   double get monthlyTotal {
     final now = DateTime.now();
     final monthlyExpenses = _expenses.where((expense) =>
@@ -41,19 +40,6 @@ class ExpenseProvider extends ChangeNotifier {
     return monthlyExpenses.fold(0.0, (sum, expense) => sum + expense.amount);
   }
 
-  ExpenseProvider() {
-    _repo.watchExpenses().listen((list) {
-      _expenses = list;
-      _isLoading = false;
-      notifyListeners();
-    }, onError: (e) {
-      _errorMessage = e.toString();
-      _isLoading = false;
-      notifyListeners();
-    });
-  }
-
-  // Helpers for internal state
   void _setLoading(bool loading) {
     _isLoading = loading;
     notifyListeners();
@@ -64,47 +50,128 @@ class ExpenseProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // CRUD operations via repository
-  Future<void> addExpense(ExpenseModel e) async {
+  Future<void> loadExpenses(String userId) async {
     try {
       _setLoading(true);
-      await _repo.addExpense(e);
+      _setError(null);
+
+      final querySnapshot = await FirebaseService.expensesCollection
+          .where('userId', isEqualTo: userId)
+          .orderBy('date', descending: true)
+          .get();
+
+      _expenses = querySnapshot.docs
+          .map((doc) => ExpenseModel.fromFirestore(doc))
+          .toList();
     } catch (e) {
-      _setError("Failed to add expense: $e");
+      _setError('Failed to load expenses');
     } finally {
       _setLoading(false);
     }
   }
 
-  Future<void> updateExpense(ExpenseModel e) async {
+  Future<bool> addExpense({
+    required String userId,
+    required String title,
+    required String description,
+    required double amount,
+    required String category,
+    String? subcategory,
+    required DateTime date,
+    String? receiptUrl,
+    Map<String, dynamic>? metadata,
+  }) async {
     try {
       _setLoading(true);
-      await _repo.updateExpense(e);
+      _setError(null);
+
+      final expense = ExpenseModel(
+        id: '', // Will be set by Firestore
+        userId: userId,
+        title: title,
+        description: description,
+        amount: amount,
+        category: category,
+        subcategory: subcategory,
+        date: date,
+        receiptUrl: receiptUrl,
+        metadata: metadata,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      final docRef =
+          await FirebaseService.expensesCollection.add(expense.toFirestore());
+
+      // Add to local list with the generated ID
+      final newExpense = ExpenseModel(
+        id: docRef.id,
+        userId: userId,
+        title: title,
+        description: description,
+        amount: amount,
+        category: category,
+        subcategory: subcategory,
+        date: date,
+        receiptUrl: receiptUrl,
+        metadata: metadata,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
+
+      _expenses.insert(0, newExpense);
+
+      return true;
     } catch (e) {
-      _setError("Failed to update expense: $e");
+      _setError('Failed to add expense');
+      return false;
     } finally {
       _setLoading(false);
     }
   }
 
-  Future<void> deleteExpense(String id) async {
+  Future<bool> updateExpense(ExpenseModel updatedExpense) async {
     try {
       _setLoading(true);
-      await _repo.deleteExpense(id);
+      _setError(null);
+
+      await FirebaseService.expensesCollection
+          .doc(updatedExpense.id)
+          .update(updatedExpense.toFirestore());
+
+      final index =
+          _expenses.indexWhere((expense) => expense.id == updatedExpense.id);
+      if (index != -1) {
+        _expenses[index] = updatedExpense;
+      }
+
+      return true;
     } catch (e) {
-      _setError("Failed to delete expense: $e");
+      _setError('Failed to update expense');
+      return false;
     } finally {
       _setLoading(false);
     }
   }
 
-  Future<void> loadExpenses() async {
-    // Optionally add manual load logic here if needed (e.g., force refresh)
-    // For now, it triggers UI update from the stream
-    notifyListeners();
+  Future<bool> deleteExpense(String expenseId) async {
+    try {
+      _setLoading(true);
+      _setError(null);
+
+      await FirebaseService.expensesCollection.doc(expenseId).delete();
+
+      _expenses.removeWhere((expense) => expense.id == expenseId);
+
+      return true;
+    } catch (e) {
+      _setError('Failed to delete expense');
+      return false;
+    } finally {
+      _setLoading(false);
+    }
   }
 
-  // Extra query helpers
   List<ExpenseModel> getExpensesByCategory(String category) {
     return _expenses.where((expense) => expense.category == category).toList();
   }
