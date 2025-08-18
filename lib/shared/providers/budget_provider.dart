@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/budget_model.dart';
+import '../models/user_model.dart';
+import '../../features/budget/data/budget_repository.dart';
 import '../../core/services/firebase_service.dart';
-import '../models/user_model.dart'; // Ensure this import is present
 
 class ExtraBudget {
   final String id;
@@ -18,6 +18,8 @@ class ExtraBudget {
 }
 
 class BudgetProvider extends ChangeNotifier {
+  final _repo = BudgetRepository();
+
   List<BudgetModel> _budgets = [];
   bool _isLoading = false;
   String? _errorMessage;
@@ -25,13 +27,13 @@ class BudgetProvider extends ChangeNotifier {
   Map<String, double> _autoBudgets = {};
   List<ExtraBudget> _extras = [];
 
-  Map<String, double> get autoBudgets => _autoBudgets;
-  List<ExtraBudget> get extraBudgets => _extras;
-
   // Getters
   List<BudgetModel> get budgets => _budgets;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+
+  Map<String, double> get autoBudgets => _autoBudgets;
+  List<ExtraBudget> get extraBudgets => _extras;
 
   // Calculated getters
   double get totalAllocated =>
@@ -48,6 +50,19 @@ class BudgetProvider extends ChangeNotifier {
       .where((budget) => budget.isNearLimit && !budget.isOverBudget)
       .toList();
 
+  BudgetProvider() {
+    // Use the new repository's watchBudgets stream
+    _repo.watchBudgets().listen((list) {
+      _budgets = list;
+      _isLoading = false;
+      notifyListeners();
+    }, onError: (e) {
+      _errorMessage = e.toString();
+      _isLoading = false;
+      notifyListeners();
+    });
+  }
+
   void _setLoading(bool loading) {
     _isLoading = loading;
     notifyListeners();
@@ -58,150 +73,41 @@ class BudgetProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> loadBudgets(String userId) async {
+  // CRUD using repository
+  Future<void> addBudget(BudgetModel budget) async {
     try {
       _setLoading(true);
-      _setError(null);
-
-      final querySnapshot = await FirebaseService.budgetsCollection
-          .where('userId', isEqualTo: userId)
-          .where('isActive', isEqualTo: true)
-          .orderBy('category')
-          .get();
-
-      _budgets = querySnapshot.docs
-          .map((doc) => BudgetModel.fromFirestore(doc))
-          .toList();
+      await _repo.addBudget(budget);
     } catch (e) {
-      _setError('Failed to load budgets');
+      _setError('Failed to add budget');
     } finally {
       _setLoading(false);
     }
   }
 
-  Future<bool> createBudget({
-    required String userId,
-    required String category,
-    required double allocatedAmount,
-    required String period,
-    required DateTime startDate,
-    required DateTime endDate,
-  }) async {
+  Future<void> updateBudget(BudgetModel budget) async {
     try {
       _setLoading(true);
-      _setError(null);
-
-      final budget = BudgetModel(
-        id: '', // Will be set by Firestore
-        userId: userId,
-        category: category,
-        allocatedAmount: allocatedAmount,
-        spentAmount: 0,
-        period: period,
-        startDate: startDate,
-        endDate: endDate,
-        isActive: true,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
-
-      final docRef =
-          await FirebaseService.budgetsCollection.add(budget.toFirestore());
-
-      // Add to local list with the generated ID
-      final newBudget = BudgetModel(
-        id: docRef.id,
-        userId: userId,
-        category: category,
-        allocatedAmount: allocatedAmount,
-        spentAmount: 0,
-        period: period,
-        startDate: startDate,
-        endDate: endDate,
-        isActive: true,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
-
-      _budgets.add(newBudget);
-
-      return true;
-    } catch (e) {
-      _setError('Failed to create budget');
-      return false;
-    } finally {
-      _setLoading(false);
-    }
-  }
-
-  Future<bool> updateBudgetSpent(String category, double amount) async {
-    try {
-      final budgetIndex = _budgets.indexWhere(
-          (budget) => budget.category == category && budget.isActive);
-
-      if (budgetIndex == -1) return false;
-      final budget = _budgets[budgetIndex];
-      final updatedBudget = budget.copyWith(
-        spentAmount: budget.spentAmount + amount,
-        updatedAt: DateTime.now(),
-      );
-
-      await FirebaseService.budgetsCollection
-          .doc(budget.id)
-          .update(updatedBudget.toFirestore());
-
-      _budgets[budgetIndex] = updatedBudget;
-      notifyListeners();
-
-      return true;
+      await _repo.updateBudget(budget);
     } catch (e) {
       _setError('Failed to update budget');
-      return false;
-    }
-  }
-
-  Future<bool> updateBudget(BudgetModel updatedBudget) async {
-    try {
-      _setLoading(true);
-      _setError(null);
-
-      await FirebaseService.budgetsCollection
-          .doc(updatedBudget.id)
-          .update(updatedBudget.toFirestore());
-
-      final index =
-          _budgets.indexWhere((budget) => budget.id == updatedBudget.id);
-      if (index != -1) {
-        _budgets[index] = updatedBudget;
-      }
-
-      return true;
-    } catch (e) {
-      _setError('Failed to update budget');
-      return false;
     } finally {
       _setLoading(false);
     }
   }
 
-  Future<bool> deleteBudget(String budgetId) async {
+  Future<void> deleteBudget(String id) async {
     try {
       _setLoading(true);
-      _setError(null);
-
-      await FirebaseService.budgetsCollection.doc(budgetId).delete();
-
-      _budgets.removeWhere((budget) => budget.id == budgetId);
-
-      return true;
+      await _repo.deleteBudget(id);
     } catch (e) {
       _setError('Failed to delete budget');
-      return false;
     } finally {
       _setLoading(false);
     }
   }
 
+  // Additional helpers (from old code)
   BudgetModel? getBudgetByCategory(String category) {
     try {
       return _budgets.firstWhere(
@@ -216,7 +122,7 @@ class BudgetProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // NEW: Build auto-budgets from user profile percentages & income
+  // Auto-budgets from user profile percentages & income
   void loadUserBudgets(UserModel user) {
     final income = user.monthlyIncome;
     _autoBudgets = user.budgetCategories.map(
@@ -227,7 +133,7 @@ class BudgetProvider extends ChangeNotifier {
 
   void addExtraBudget(String category, double amount) {
     final extra = ExtraBudget(
-      id: Uuid().v4(),
+      id: const Uuid().v4(),
       category: category,
       amount: amount,
     );

@@ -1,4 +1,3 @@
-import 'package:budgetary/features/expenses/screen/expenses_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -9,11 +8,22 @@ import '../../features/auth/screens/login_screen.dart';
 import '../../features/auth/screens/signup_screen.dart';
 import '../../features/profile_setup/screens/profile_setup_screen.dart';
 import '../../features/dashboard/screens/dashboard_screen.dart';
+import '../../features/expenses/screen/expenses_screen.dart';
 import '../../features/budget/screens/budget_screen.dart';
 import '../../features/reports/screens/reports_screen.dart';
 import '../../features/profile/screens/profile_screen.dart';
 import '../../shared/widgets/main_layout.dart';
 import '../../shared/providers/auth_provider.dart';
+import '../services/firebase_service.dart';
+
+/// ✅ Wrapper to make FirebaseAuth listenable
+class FirebaseAuthNotifier extends ChangeNotifier {
+  FirebaseAuthNotifier() {
+    FirebaseService.auth.authStateChanges().listen((_) {
+      notifyListeners(); // 🔥 notify GoRouter when auth state changes
+    });
+  }
+}
 
 class NavigationService {
   static final GlobalKey<NavigatorState> navigatorKey =
@@ -24,6 +34,7 @@ class NavigationService {
   static final GoRouter _router = GoRouter(
     navigatorKey: navigatorKey,
     initialLocation: '/splash',
+    refreshListenable: FirebaseAuthNotifier(), // ✅ FIXED
     redirect: _redirect,
     routes: [
       // Splash & Onboarding
@@ -89,9 +100,12 @@ class NavigationService {
     ],
   );
 
+  /// 🔥 Merged redirect logic from new + old
   static String? _redirect(BuildContext context, GoRouterState state) {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final isLoggedIn = authProvider.isAuthenticated;
+    final isLoggedIn = FirebaseService.isLoggedIn; // ✅ Firebase check
+    final needsProfile =
+        (FirebaseService.currentUser?.displayName?.isEmpty ?? true);
 
     final location = state.uri.path;
 
@@ -101,18 +115,20 @@ class NavigationService {
     // If on splash, let it handle its own navigation
     if (location == '/splash') return null;
 
-    // If not logged in and trying to access protected routes
-    if (!isLoggedIn && !publicRoutes.contains(location)) {
-      return '/landing';
+    // If not logged in → send to login (not landing)
+    if (!isLoggedIn) {
+      return location == '/login' ? null : '/login';
     }
 
-    // If logged in and on public/auth routes, redirect to dashboard
-    if (isLoggedIn && publicRoutes.contains(location)) {
+    // Logged-in → check profile setup
+    if (needsProfile && location != '/profile-setup') {
+      return '/profile-setup';
+    }
+
+    // Once profile exists, force dashboard when trying to access login/signup/landing
+    if (!needsProfile && publicRoutes.contains(location)) {
       return '/dashboard';
     }
-
-    // Allow profile-setup if needed (e.g., after signup)
-    if (location == '/profile-setup') return null;
 
     return null;
   }
