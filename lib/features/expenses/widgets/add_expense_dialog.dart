@@ -1,4 +1,6 @@
 // lib/features/expenses/widgets/add_expense_dialog.dart
+// Fixed version
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -10,9 +12,9 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/config/app_config.dart';
 import '../../../shared/providers/expense_provider.dart';
 import '../../../shared/providers/user_provider.dart';
-import '../../../shared/providers/budget_provider.dart'; // NEW: Import BudgetProvider
-import '../../../shared/providers/loan_provider.dart'; // NEW: Import LoanProvider for loan payments
-import '../widgets/loan_selection_dropdown.dart'; // NEW: Import LoanSelectionDropdown
+import '../../../shared/providers/budget_provider.dart';
+import '../../../shared/providers/loan_provider.dart';
+import '../widgets/loan_selection_dropdown.dart';
 import '../../../shared/widgets/liquid_card.dart';
 import '../../../shared/widgets/liquid_button.dart';
 import '../../../shared/widgets/liquid_text_field.dart';
@@ -26,12 +28,12 @@ class AddExpenseDialog extends StatefulWidget {
 
 class _AddExpenseDialogState extends State<AddExpenseDialog> {
   final _formKey = GlobalKey<FormState>();
-  final _titleController = TextEditingController(); // NEW: Controller for title
+  final _titleController = TextEditingController();
   final _amountController = TextEditingController();
   final _descriptionController = TextEditingController();
 
   String? _selectedCategory;
-  String? _selectedLoanId; // NEW: For selected loan when category is 'Loan'
+  String? _selectedLoanId;
   DateTime _selectedDate = DateTime.now();
 
   @override
@@ -52,6 +54,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: const ColorScheme.light(
+              // Added const
               primary: AppTheme.primaryPurple,
               onPrimary: Colors.white,
               surface: Colors.white,
@@ -62,7 +65,6 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
         );
       },
     );
-
     if (date != null) {
       setState(() {
         _selectedDate = date;
@@ -74,7 +76,8 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     if (_selectedCategory == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a category')),
+        const SnackBar(
+            content: Text('Please select a category')), // Added const
       );
       return;
     }
@@ -82,60 +85,64 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
     final amount = double.tryParse(_amountController.text.trim());
     if (amount == null || amount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid amount')),
+        const SnackBar(
+            content: Text('Please enter a valid amount')), // Added const
       );
       return;
     }
 
-    final userId =
-        FirebaseAuth.instance.currentUser?.uid ?? ''; // NEW: Get userId
+    final userId = FirebaseAuth.instance.currentUser?.uid ?? '';
     if (userId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('User not authenticated')),
+        const SnackBar(content: Text('User not authenticated')), // Added const
       );
       return;
     }
-
+    final title = _titleController.text.trim();
     final expenseProvider =
         Provider.of<ExpenseProvider>(context, listen: false);
     final success = await expenseProvider.addExpense(
-      title: _titleController.text.trim(), // NEW: Pass title
-      description: _descriptionController.text.trim(),
+      title: title, // NEW: Pass title
       amount: amount,
       category: _selectedCategory!,
+      subcategory:
+          '', // Added missing subcategory (use empty or dynamic if needed)
+      description: _descriptionController.text.trim(),
       date: _selectedDate,
     );
 
-    // NEW: If category is 'Loan' and a loan is selected, update the loan payment
     if (success && _selectedCategory == 'Loan' && _selectedLoanId != null) {
       final loanProvider = Provider.of<LoanProvider>(context, listen: false);
       final paymentSuccess =
           await loanProvider.makePayment(_selectedLoanId!, amount);
       if (paymentSuccess) {
-        // Refresh budgets to reflect change
         final budgetProvider =
             Provider.of<BudgetProvider>(context, listen: false);
-        await budgetProvider.loadBudgets(
-            expenseProvider); // FIXED: Pass the required ExpenseProvider argument
+        await budgetProvider.loadBudgets(expenseProvider);
       } else {
+        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text(
-                  loanProvider.errorMessage ?? 'Failed to update loan payment'),
-              backgroundColor: Colors.red),
+            content: Text(
+                loanProvider.errorMessage ?? 'Failed to update loan payment'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }
 
-    if (success && mounted) {
+    if (success) {
+      if (!context.mounted) return;
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
+          // Added const
           content: Text('Expense added successfully!'),
           backgroundColor: Colors.green,
         ),
       );
-    } else if (mounted) {
+    } else {
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content:
@@ -149,10 +156,8 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
   @override
   Widget build(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
-    final budgetProvider =
-        Provider.of<BudgetProvider>(context); // NEW: Access BudgetProvider
-    final categories = budgetProvider
-        .getAllBudgetCategories(); // NEW: Use dynamic categories from BudgetProvider
+    final budgetProvider = Provider.of<BudgetProvider>(context);
+    final categories = budgetProvider.getAllBudgetCategories();
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -162,8 +167,9 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
         child: LiquidCard(
           gradient: LinearGradient(
             colors: [
-              AppTheme.primaryPurple.withOpacity(0.95),
-              AppTheme.primaryBlue.withOpacity(0.95),
+              AppTheme.primaryPurple
+                  .withAlpha(242), // Fixed deprecated withOpacity
+              AppTheme.primaryBlue.withAlpha(242),
             ],
           ),
           child: SingleChildScrollView(
@@ -176,10 +182,11 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
+                      const Text(
+                        // Added const
                         'Add Expense',
                         style: TextStyle(
-                          fontSize: 24.sp,
+                          fontSize: 24,
                           fontWeight: FontWeight.w700,
                           color: Colors.white,
                         ),
@@ -188,7 +195,8 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                         onPressed: () => Navigator.of(context).pop(),
                         icon: Icon(
                           Icons.close,
-                          color: Colors.white.withOpacity(0.8),
+                          color: Colors.white
+                              .withAlpha(204), // Fixed deprecated withOpacity
                         ),
                       ),
                     ],
@@ -196,10 +204,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                       .animate()
                       .fadeIn(duration: 600.ms)
                       .slideY(begin: -0.3, end: 0),
-
                   SizedBox(height: 24.h),
-
-                  // NEW: Title field
                   LiquidTextField(
                     labelText: 'Title',
                     hintText: 'Enter title',
@@ -214,60 +219,56 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                       .animate()
                       .fadeIn(delay: 100.ms, duration: 600.ms)
                       .slideX(begin: -0.3, end: 0),
-
                   SizedBox(height: 20.h),
-
-                  // Category Selection
                   Text(
                     'Category',
                     style: TextStyle(
                       fontSize: 16.sp,
                       fontWeight: FontWeight.w600,
-                      color: Colors.white.withOpacity(0.9),
+                      color: Colors.white
+                          .withAlpha(229), // Fixed deprecated withOpacity
                     ),
                   ),
                   SizedBox(height: 8.h),
                   Container(
                     padding: EdgeInsets.symmetric(horizontal: 16.w),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.1),
+                      color: Colors.white
+                          .withAlpha(26), // Fixed deprecated withOpacity
                       borderRadius: BorderRadius.circular(16.r),
-                      border: Border.all(color: Colors.white.withOpacity(0.2)),
+                      border: Border.all(color: Colors.white.withAlpha(51)),
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         value: _selectedCategory,
                         hint: Text(
                           'Select category',
-                          style:
-                              TextStyle(color: Colors.white.withOpacity(0.7)),
+                          style: TextStyle(
+                              color: Colors.white.withAlpha(
+                                  178)), // Fixed deprecated withOpacity
                         ),
                         isExpanded: true,
                         dropdownColor: AppTheme.primaryPurple,
-                        icon: Icon(Icons.keyboard_arrow_down,
-                            color: Colors.white),
+                        icon: const Icon(Icons.keyboard_arrow_down,
+                            color: Colors.white), // Added const
                         items: categories.map((category) {
                           final defaultIcon =
                               AppConfig.defaultCategories[category] ?? '';
                           final isCustom = defaultIcon.isEmpty;
-                          final iconText = isCustom
-                              ? '💼'
-                              : defaultIcon; // Default icon for custom
+                          final iconText = isCustom ? '💼' : defaultIcon;
                           return DropdownMenuItem(
                             value: category,
                             child: Row(
                               children: [
-                                Text(
-                                  iconText,
-                                  style: TextStyle(fontSize: 18.sp),
-                                ),
+                                Text(iconText,
+                                    style: const TextStyle(
+                                        fontSize: 18)), // Added const
                                 SizedBox(width: 12.w),
                                 Text(
                                   category,
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16.sp,
-                                  ),
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 16), // Added const
                                 ),
                               ],
                             ),
@@ -276,8 +277,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                         onChanged: (value) {
                           setState(() {
                             _selectedCategory = value;
-                            _selectedLoanId =
-                                null; // Reset loan selection when category changes
+                            _selectedLoanId = null;
                           });
                         },
                       ),
@@ -286,12 +286,8 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                       .animate()
                       .fadeIn(delay: 200.ms, duration: 600.ms)
                       .slideX(begin: -0.3, end: 0),
-
                   SizedBox(height: 20.h),
-
-                  // NEW: Conditional Loan Selection Dropdown if category is 'Loan'
-                  if (_selectedCategory ==
-                      'Loan') // Assuming 'Loan' is the exact category name
+                  if (_selectedCategory == 'Loan')
                     LoanSelectionDropdown(
                       selectedLoanId: _selectedLoanId,
                       onLoanSelected: (loanId) {
@@ -299,13 +295,9 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                           _selectedLoanId = loanId;
                         });
                       },
-                      currency: userProvider
-                          .currency, // Pass the user's currency from UserProvider
+                      currency: userProvider.currency,
                     ),
-
                   SizedBox(height: 20.h),
-
-                  // Amount
                   LiquidTextField(
                     labelText: 'Amount (${userProvider.currency})',
                     hintText: 'Enter amount',
@@ -325,10 +317,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                       .animate()
                       .fadeIn(delay: 300.ms, duration: 600.ms)
                       .slideX(begin: 0.3, end: 0),
-
                   SizedBox(height: 20.h),
-
-                  // Description
                   LiquidTextField(
                     labelText: 'Description',
                     hintText: 'Enter description (optional)',
@@ -339,16 +328,14 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                       .animate()
                       .fadeIn(delay: 400.ms, duration: 600.ms)
                       .slideX(begin: -0.3, end: 0),
-
                   SizedBox(height: 20.h),
-
-                  // Date Selection
                   Text(
                     'Date',
                     style: TextStyle(
                       fontSize: 16.sp,
                       fontWeight: FontWeight.w600,
-                      color: Colors.white.withOpacity(0.9),
+                      color: Colors.white
+                          .withAlpha(229), // Fixed deprecated withOpacity
                     ),
                   ),
                   SizedBox(height: 8.h),
@@ -358,23 +345,23 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                       padding: EdgeInsets.symmetric(
                           horizontal: 16.w, vertical: 16.h),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
+                        color: Colors.white
+                            .withAlpha(26), // Fixed deprecated withOpacity
                         borderRadius: BorderRadius.circular(16.r),
-                        border:
-                            Border.all(color: Colors.white.withOpacity(0.2)),
+                        border: Border.all(color: Colors.white.withAlpha(51)),
                       ),
                       child: Row(
                         children: [
                           Icon(Icons.calendar_today,
-                              color: Colors.white.withOpacity(0.8)),
+                              color: Colors.white.withAlpha(
+                                  204)), // Fixed deprecated withOpacity
                           SizedBox(width: 12.w),
                           Text(
                             DateFormat('EEEE, MMM dd, yyyy')
                                 .format(_selectedDate),
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16.sp,
-                            ),
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16), // Added const
                           ),
                         ],
                       ),
@@ -383,10 +370,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                       .animate()
                       .fadeIn(delay: 500.ms, duration: 600.ms)
                       .slideX(begin: 0.3, end: 0),
-
                   SizedBox(height: 32.h),
-
-                  // Add Button
                   SizedBox(
                     width: double.infinity,
                     child: LiquidButton(
@@ -394,7 +378,10 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                       onPressed: _addExpense,
                       icon: Icons.add,
                       gradient: LinearGradient(
-                        colors: [Colors.white, Colors.white.withOpacity(0.8)],
+                        colors: [
+                          Colors.white,
+                          Colors.white.withAlpha(204)
+                        ], // Fixed deprecated withOpacity
                       ),
                     ),
                   )

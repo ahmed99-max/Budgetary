@@ -1,3 +1,6 @@
+// lib/features/profile_setup/screens/profile_setup_screen.dart
+// BATCH 1: UPDATE THIS EXISTING FILE
+
 import 'package:budgetary/features/loan/widgets/add_loan_dialog.dart';
 import 'package:budgetary/shared/providers/loan_provider.dart';
 import 'package:flutter/material.dart';
@@ -7,6 +10,7 @@ import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/config/app_config.dart';
 import '../../../core/constants/city_percentages.dart';
@@ -17,6 +21,9 @@ import '../../../shared/widgets/liquid_text_field.dart';
 import '../../../shared/widgets/liquid_card.dart';
 import '../../../shared/widgets/loading_overlay.dart';
 import '../../../shared/widgets/percentage_input.dart';
+import '../../../shared/widgets/liquid_card.dart';
+import '../../../shared/widgets/liquid_button.dart';
+import '../../../shared/widgets/liquid_text_field.dart';
 
 class BudgetCategory {
   final String id;
@@ -59,28 +66,54 @@ class BudgetCategory {
   }
 }
 
-class LoanEMI {
+// ENHANCED LOAN MODEL for Profile Setup
+class ProfileLoanItem {
   final String id;
   final String name;
-  final double amount;
+  final double totalAmount;
   final double monthlyPayment;
-  final int remainingMonths;
+  final DateTime startDate;
+  final int totalMonths;
 
-  LoanEMI({
+  ProfileLoanItem({
     required this.id,
     required this.name,
-    required this.amount,
+    required this.totalAmount,
     required this.monthlyPayment,
-    required this.remainingMonths,
+    required this.startDate,
+    required this.totalMonths,
   });
+
+  // Calculate months elapsed from start date
+  int get monthsElapsed {
+    final now = DateTime.now();
+    int diff = (now.year - startDate.year) * 12 + (now.month - startDate.month);
+    if (now.day < startDate.day) diff -= 1;
+    return diff < 0 ? 0 : diff;
+  }
+
+  int get remainingMonths {
+    final rem = totalMonths - monthsElapsed;
+    return rem < 0 ? 0 : rem;
+  }
+
+  double get remainingAmount => remainingMonths * monthlyPayment;
+
+  double get paidAmount => monthsElapsed * monthlyPayment;
+
+  double get progressPercentage =>
+      totalMonths > 0 ? (monthsElapsed / totalMonths) * 100 : 0;
+
+  bool get isCompleted => remainingMonths <= 0;
 
   Map<String, dynamic> toMap() {
     return {
       'id': id,
       'name': name,
-      'amount': amount,
+      'totalAmount': totalAmount,
       'monthlyPayment': monthlyPayment,
-      'remainingMonths': remainingMonths,
+      'startDate': startDate.toIso8601String(),
+      'totalMonths': totalMonths,
     };
   }
 }
@@ -97,10 +130,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final _phoneController = TextEditingController();
   final _incomeController = TextEditingController();
   final _categoryNameController = TextEditingController();
-  final _loanNameController = TextEditingController();
-  final _loanAmountController = TextEditingController();
-  final _monthlyPaymentController = TextEditingController();
-  final _remainingMonthsController = TextEditingController();
 
   String _selectedCountry = 'United States';
   String _selectedCity = 'New York';
@@ -108,7 +137,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
   List<BudgetCategory> _availableCategories = [];
   Map<String, double> _budgetPercentages = {};
-  List<LoanEMI> _loans = [];
+  List<ProfileLoanItem> _loans = []; // UPDATED: Use ProfileLoanItem
   bool _dataLoading = true;
   String? _loadError;
 
@@ -396,32 +425,224 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     }
   }
 
-  void _addLoan() {
-    final name = _loanNameController.text.trim();
-    final amount = double.tryParse(_loanAmountController.text);
-    final monthlyPayment = double.tryParse(_monthlyPaymentController.text);
-    final remainingMonths = int.tryParse(_remainingMonthsController.text);
+  // ENHANCED ADD LOAN DIALOG
+  void _showAddLoanDialog() {
+    final _loanNameController = TextEditingController();
+    final _loanAmountController = TextEditingController();
+    final _monthlyPaymentController = TextEditingController();
+    final _tenureController = TextEditingController();
+    DateTime _startDate = DateTime.now();
 
-    if (name.isEmpty ||
-        amount == null ||
-        monthlyPayment == null ||
-        remainingMonths == null) {
-      _showErrorSnackBar('Please fill all loan details correctly');
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => Dialog(
+          backgroundColor: Colors.transparent,
+          child: LiquidCard(
+            child: Container(
+              width: double.infinity,
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.8,
+              ),
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: EdgeInsets.all(20.w),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Add Loan EMI',
+                            style: TextStyle(
+                              fontSize: 20.sp,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.grey.shade800,
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            icon: Icon(Icons.close, size: 24.sp),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 20.h),
+
+                      // Loan Name
+                      LiquidTextField(
+                        labelText: 'Loan Name *',
+                        hintText: 'e.g., Home Loan, Car Loan',
+                        controller: _loanNameController,
+                        prefixIcon: Icons.title,
+                      ),
+                      SizedBox(height: 16.h),
+
+                      // Total Amount
+                      LiquidTextField(
+                        labelText: 'Total Loan Amount *',
+                        hintText: 'Enter total loan amount',
+                        controller: _loanAmountController,
+                        keyboardType: TextInputType.number,
+                        prefixIcon: Icons.attach_money,
+                      ),
+                      SizedBox(height: 16.h),
+
+                      // Monthly Payment
+                      LiquidTextField(
+                        labelText: 'Monthly EMI *',
+                        hintText: 'Enter monthly payment',
+                        controller: _monthlyPaymentController,
+                        keyboardType: TextInputType.number,
+                        prefixIcon: Icons.payment,
+                      ),
+                      SizedBox(height: 16.h),
+
+                      // Tenure in months
+                      LiquidTextField(
+                        labelText: 'Total Tenure (Months) *',
+                        hintText: 'e.g., 240 for 20 years',
+                        controller: _tenureController,
+                        keyboardType: TextInputType.number,
+                        prefixIcon: Icons.calendar_month,
+                      ),
+                      SizedBox(height: 16.h),
+
+                      // Start Date Selector
+                      Text(
+                        'Loan Start Date *',
+                        style: TextStyle(
+                          fontSize: 14.sp,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                      SizedBox(height: 8.h),
+                      InkWell(
+                        onTap: () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: _startDate,
+                            firstDate: DateTime(2000),
+                            lastDate: DateTime.now(),
+                          );
+                          if (picked != null) {
+                            setState(() {
+                              _startDate = picked;
+                            });
+                          }
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 16.w, vertical: 12.h),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(12.r),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.calendar_today,
+                                size: 16.sp,
+                                color: AppTheme.primaryPurple,
+                              ),
+                              SizedBox(width: 8.w),
+                              Text(
+                                DateFormat('dd/MM/yyyy').format(_startDate),
+                                style: TextStyle(
+                                  fontSize: 14.sp,
+                                  color: Colors.grey.shade800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: 24.h),
+
+                      // Action Buttons
+                      Row(
+                        children: [
+                          Expanded(
+                            child: LiquidButton(
+                              text: 'Cancel',
+                              isOutlined: true,
+                              onPressed: () => Navigator.of(context).pop(),
+                            ),
+                          ),
+                          SizedBox(width: 12.w),
+                          Expanded(
+                            child: LiquidButton(
+                              text: 'Add Loan',
+                              gradient: AppTheme.liquidBackground,
+                              onPressed: () => _addLoanFromDialog(
+                                _loanNameController,
+                                _loanAmountController,
+                                _monthlyPaymentController,
+                                _tenureController,
+                                _startDate,
+                              ),
+                              icon: Icons.add,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ENHANCED LOAN ADDITION WITH PROPER VALIDATION
+  void _addLoanFromDialog(
+    TextEditingController nameController,
+    TextEditingController amountController,
+    TextEditingController paymentController,
+    TextEditingController tenureController,
+    DateTime startDate,
+  ) {
+    final name = nameController.text.trim();
+    final amount = double.tryParse(amountController.text.trim());
+    final monthlyPayment = double.tryParse(paymentController.text.trim());
+    final tenure = int.tryParse(tenureController.text.trim());
+
+    if (name.isEmpty) {
+      _showErrorSnackBar('Please enter loan name');
+      return;
+    }
+
+    if (amount == null || amount <= 0) {
+      _showErrorSnackBar('Please enter valid loan amount');
+      return;
+    }
+
+    if (monthlyPayment == null || monthlyPayment <= 0) {
+      _showErrorSnackBar('Please enter valid monthly payment');
+      return;
+    }
+
+    if (tenure == null || tenure <= 0) {
+      _showErrorSnackBar('Please enter valid tenure in months');
       return;
     }
 
     setState(() {
-      _loans.add(LoanEMI(
+      _loans.add(ProfileLoanItem(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         name: name,
-        amount: amount,
+        totalAmount: amount,
         monthlyPayment: monthlyPayment,
-        remainingMonths: remainingMonths,
+        startDate: startDate,
+        totalMonths: tenure,
       ));
-      _loanNameController.clear();
-      _loanAmountController.clear();
-      _monthlyPaymentController.clear();
-      _remainingMonthsController.clear();
     });
 
     Navigator.of(context).pop();
@@ -432,6 +653,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     setState(() {
       _loans.removeWhere((loan) => loan.id == id);
     });
+    _showSuccessSnackBar('Loan removed successfully');
   }
 
   Future<void> _completeSetup() async {
@@ -495,7 +717,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         budgetCategories: _budgetPercentages,
         emiLoans: _loans.map((loan) => loan.toMap()).toList(),
         investments: [],
-        loanProvider: LoanProvider(), // FIXED: Pass the provider here
+        loanProvider: LoanProvider(),
       );
 
       if (!success) {
@@ -555,13 +777,13 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
           'endDate': Timestamp.fromDate(endDate),
           'isActive': true,
           'isLoan': true,
+          'isLoanCategory': true,
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
         });
       }
 
-      await batch
-          .commit(); // FIXED: Ensure no extra positional arguments here (expects 0)
+      await batch.commit();
 
       print("✅ BATCH COMMITTED SUCCESSFULLY");
       print("📝 Created budgets for user: $uid");
@@ -605,37 +827,6 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     );
   }
 
-  void _showAddLoanDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AddLoanDialog(
-        // This is the enhanced dialog from add_loan_dialog.dart
-        onLoanUpdated: () {
-          // Optional: Refresh any UI after adding (e.g., reload loans list)
-          setState(() {
-            // Assuming you have _loans as List<LoanEMI> in your state
-            // Add the new loan to local list (customize based on your LoanEMI model)
-            _loans.add(LoanEMI(
-              id: DateTime.now().millisecondsSinceEpoch.toString(),
-              name: _loanNameController.text
-                  .trim(), // If you still have these controllers
-              amount: double.tryParse(_loanAmountController.text) ?? 0,
-              monthlyPayment:
-                  double.tryParse(_monthlyPaymentController.text) ?? 0,
-              remainingMonths:
-                  int.tryParse(_remainingMonthsController.text) ?? 0,
-            ));
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content: Text('Loan added successfully'),
-                backgroundColor: Colors.green),
-          );
-        },
-      ),
-    );
-  }
-
   void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -658,15 +849,59 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     );
   }
 
+  // ENHANCED LOAN DETAIL ITEM HELPER
+  Widget _buildLoanDetailItem(
+    String label,
+    String value,
+    IconData icon, {
+    Color? color,
+  }) {
+    return Container(
+      padding: EdgeInsets.all(8.w),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8.r),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                icon,
+                size: 14.sp,
+                color: color ?? Colors.white70,
+              ),
+              SizedBox(width: 4.w),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 10.sp,
+                  color: Colors.white70,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 4.h),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 12.sp,
+              fontWeight: FontWeight.w600,
+              color: color ?? Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _phoneController.dispose();
     _incomeController.dispose();
     _categoryNameController.dispose();
-    _loanNameController.dispose();
-    _loanAmountController.dispose();
-    _monthlyPaymentController.dispose();
-    _remainingMonthsController.dispose();
     super.dispose();
   }
 
@@ -1120,7 +1355,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                           SizedBox(height: 30.h),
                         ],
 
-                        // Loans & EMIs Section
+                        // ENHANCED LOANS & EMIs SECTION
                         LiquidCard(
                           gradient: LinearGradient(
                             colors: [
@@ -1171,51 +1406,178 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                                   ),
                                 )
                               else
+                                // ENHANCED LOAN DISPLAY CARDS
                                 Column(
                                   children: _loans.map((loan) {
                                     return Container(
                                       margin: EdgeInsets.only(bottom: 12.h),
-                                      padding: EdgeInsets.all(12.w),
+                                      padding: EdgeInsets.all(16.w),
                                       decoration: BoxDecoration(
-                                        color: Colors.white.withOpacity(0.1),
+                                        gradient: LinearGradient(
+                                          colors: [
+                                            AppTheme.primaryPurple
+                                                .withOpacity(0.8),
+                                            AppTheme.primaryBlue
+                                                .withOpacity(0.6),
+                                          ],
+                                          begin: Alignment.topLeft,
+                                          end: Alignment.bottomRight,
+                                        ),
                                         borderRadius:
-                                            BorderRadius.circular(8.r),
+                                            BorderRadius.circular(16.r),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: AppTheme.primaryPurple
+                                                .withOpacity(0.3),
+                                            blurRadius: 12,
+                                            offset: const Offset(0, 4),
+                                          ),
+                                        ],
                                       ),
-                                      child: Row(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
+                                          Row(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Expanded(
+                                                child: Text(
                                                   loan.name,
                                                   style: TextStyle(
-                                                    fontSize: 14.sp,
-                                                    fontWeight: FontWeight.w600,
+                                                    fontSize: 16.sp,
+                                                    fontWeight: FontWeight.w700,
                                                     color: Colors.white,
                                                   ),
                                                 ),
-                                                SizedBox(height: 4.h),
-                                                Text(
-                                                  'EMI: $_selectedCurrency ${loan.monthlyPayment.toStringAsFixed(0)} | ${loan.remainingMonths} months left',
-                                                  style: TextStyle(
-                                                    fontSize: 12.sp,
-                                                    color: Colors.white
-                                                        .withOpacity(0.8),
+                                              ),
+                                              Row(
+                                                children: [
+                                                  Container(
+                                                    padding:
+                                                        EdgeInsets.symmetric(
+                                                      horizontal: 8.w,
+                                                      vertical: 4.h,
+                                                    ),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.white
+                                                          .withOpacity(0.2),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              12.r),
+                                                    ),
+                                                    child: Text(
+                                                      '${loan.progressPercentage.toStringAsFixed(1)}%',
+                                                      style: TextStyle(
+                                                        fontSize: 12.sp,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                        color: Colors.white,
+                                                      ),
+                                                    ),
                                                   ),
-                                                ),
-                                              ],
+                                                  SizedBox(width: 8.w),
+                                                  IconButton(
+                                                    onPressed: () =>
+                                                        _removeLoan(loan.id),
+                                                    icon: Icon(
+                                                      Icons.delete_outline,
+                                                      color: Colors.white70,
+                                                      size: 20.sp,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                          SizedBox(height: 12.h),
+
+                                          // Progress Bar
+                                          ClipRRect(
+                                            borderRadius:
+                                                BorderRadius.circular(6.r),
+                                            child: LinearProgressIndicator(
+                                              value: (loan.progressPercentage /
+                                                      100)
+                                                  .clamp(0.0, 1.0),
+                                              minHeight: 6.h,
+                                              backgroundColor:
+                                                  Colors.white.withOpacity(0.3),
+                                              valueColor:
+                                                  AlwaysStoppedAnimation(
+                                                loan.isCompleted
+                                                    ? Colors.greenAccent
+                                                    : Colors.white,
+                                              ),
                                             ),
                                           ),
-                                          IconButton(
-                                            onPressed: () =>
-                                                _removeLoan(loan.id),
-                                            icon: Icon(
-                                              Icons.delete_outline,
-                                              color: Colors.redAccent,
-                                              size: 20.sp,
-                                            ),
+                                          SizedBox(height: 12.h),
+
+                                          // Loan Details Grid
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: _buildLoanDetailItem(
+                                                  'Total Amount',
+                                                  '$_selectedCurrency ${NumberFormat('#,##0').format(loan.totalAmount)}',
+                                                  Icons.account_balance_wallet,
+                                                ),
+                                              ),
+                                              SizedBox(width: 12.w),
+                                              Expanded(
+                                                child: _buildLoanDetailItem(
+                                                  'Monthly EMI',
+                                                  '$_selectedCurrency ${NumberFormat('#,##0').format(loan.monthlyPayment)}',
+                                                  Icons.payment,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          SizedBox(height: 8.h),
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: _buildLoanDetailItem(
+                                                  'Paid So Far',
+                                                  '$_selectedCurrency ${NumberFormat('#,##0').format(loan.paidAmount)}',
+                                                  Icons.trending_up,
+                                                  color: Colors.greenAccent,
+                                                ),
+                                              ),
+                                              SizedBox(width: 12.w),
+                                              Expanded(
+                                                child: _buildLoanDetailItem(
+                                                  'Remaining',
+                                                  '$_selectedCurrency ${NumberFormat('#,##0').format(loan.remainingAmount)}',
+                                                  Icons.pending_actions,
+                                                  color: Colors.orangeAccent,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          SizedBox(height: 8.h),
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: _buildLoanDetailItem(
+                                                  'Months Elapsed',
+                                                  '${loan.monthsElapsed} months',
+                                                  Icons.calendar_today,
+                                                ),
+                                              ),
+                                              SizedBox(width: 12.w),
+                                              Expanded(
+                                                child: _buildLoanDetailItem(
+                                                  'Remaining Months',
+                                                  '${loan.remainingMonths} months',
+                                                  Icons.schedule,
+                                                  color: loan.isCompleted
+                                                      ? Colors.greenAccent
+                                                      : Colors.white,
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ],
                                       ),

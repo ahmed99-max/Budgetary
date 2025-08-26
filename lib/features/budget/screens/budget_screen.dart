@@ -18,7 +18,10 @@ import '../../../shared/widgets/liquid_button.dart';
 import '../widgets/budget_summary_card.dart';
 import '../widgets/budget_category_item.dart';
 import '../widgets/add_budget_dialog.dart';
-import '../widgets/loan_card_widget.dart';
+import '../widgets/enhanced_loan_card_widget.dart';
+import '../widgets/add_category_expense_dialog.dart';
+import '../widgets/loan_budget_category_item.dart';
+import '../../../features/budget/widgets/add_loan_expense_dialog.dart';
 
 class BudgetScreen extends StatefulWidget {
   const BudgetScreen({super.key});
@@ -34,6 +37,25 @@ class _BudgetScreenState extends State<BudgetScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
     });
+  }
+
+  void _showAddCategoryExpenseDialog(BudgetModel budget) {
+    showDialog(
+      context: context,
+      builder: (context) => AddCategoryExpenseDialog(
+        budget: budget,
+        onExpenseAdded: _loadData,
+      ),
+    );
+  }
+
+  void _showAddLoanExpenseDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AddLoanExpenseDialog(
+        onExpenseAdded: _loadData,
+      ),
+    );
   }
 
   Future<void> _loadData() async {
@@ -74,6 +96,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
   Future<void> _deleteBudget(String budgetId) async {
     final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
+    budgetProvider.deleteBudget(budgetId);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -198,8 +221,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 colors: [
-                                  Colors.white.withOpacity(0.2),
-                                  Colors.white.withOpacity(0.1),
+                                  Color.fromRGBO(255, 255, 255, 0.2),
+                                  Color.fromRGBO(255, 255, 255, 0.1),
                                 ],
                               ),
                               borderRadius: BorderRadius.circular(20.r),
@@ -282,8 +305,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
   }
 
   // In your budget_screen.dart, update the _buildLoansSection method:
-
-  Widget _buildLoansSection(List<Loan> loans, String currency, bool isLoading) {
+  Widget _buildLoansSection(List loans, String currency, bool isLoading) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -345,8 +367,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
               final loan = entry.value;
               return Container(
                 margin: EdgeInsets.only(bottom: 12.h),
-                child: LoanCardWidget(
-                  // This now uses the enhanced version
+                child: EnhancedLoanCardWidget(
+                  // CHANGED: Use EnhancedLoanCardWidget
                   loan: loan,
                   currency: currency,
                   onUpdated: _loadData,
@@ -440,13 +462,22 @@ class _BudgetScreenState extends State<BudgetScreen> {
                 expenseProvider.categoryTotals[budget.category] ?? 0.0;
             return Container(
               margin: EdgeInsets.only(bottom: 16.h),
-              child: BudgetCategoryItem(
-                budget: budget,
-                spent: spent,
-                currency: currency,
-                onDelete: () => _deleteBudget(budget.id),
-                onEdit: () => _editBudget(budget.id),
-              ),
+              child: budget.isLoanCategory ?? false
+                  ? LoanBudgetCategoryItem(
+                      budget: budget,
+                      spent: spent,
+                      currency: currency,
+                      onAddExpense: () => _showAddLoanExpenseDialog(),
+                    )
+                  : BudgetCategoryItem(
+                      budget: budget,
+                      spent: spent,
+                      currency: currency,
+                      onDelete: () => _deleteBudget(budget.id),
+                      onEdit: () => _editBudget(budget.id),
+                      onAddExpense: () =>
+                          _showAddCategoryExpenseDialog(budget), // Add this
+                    ),
             )
                 .animate()
                 .fadeIn(delay: Duration(milliseconds: 600 + (index * 100)))

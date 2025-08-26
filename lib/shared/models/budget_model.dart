@@ -13,6 +13,7 @@ class BudgetModel {
   final bool isLoan; // New flag for loan budgets
   final DateTime createdAt;
   final DateTime updatedAt;
+  final bool isLoanCategory;
 
   BudgetModel({
     required this.id,
@@ -27,6 +28,7 @@ class BudgetModel {
     this.isLoan = false,
     required this.createdAt,
     required this.updatedAt,
+    this.isLoanCategory = false, // Default to false
   });
 
   factory BudgetModel.fromFirestore(DocumentSnapshot doc) {
@@ -44,6 +46,7 @@ class BudgetModel {
       isLoan: data['isLoan'] ?? false, // New
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      isLoanCategory: data['isLoanCategory'] ?? false,
     );
   }
 
@@ -60,6 +63,7 @@ class BudgetModel {
       'isLoan': isLoan, // New
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
+      'isLoanCategory': isLoanCategory,
     };
   }
 

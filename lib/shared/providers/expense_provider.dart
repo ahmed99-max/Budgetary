@@ -1,14 +1,13 @@
-// lib/shared/providers/expense_provider.dart
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/expense_model.dart';
 import '../../core/services/firebase_service.dart';
+import 'loan_provider.dart'; // Imports Loan class
 
 class ExpenseProvider extends ChangeNotifier {
-  List<ExpenseModel> _expenses = [];
+  List<ExpenseModel> _expenses = []; // Removed final (needs reassignment)
   bool _isLoading = false;
   String? _errorMessage;
 
@@ -16,14 +15,19 @@ class ExpenseProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  double get totalExpenses =>
-      _expenses.fold(0, (sum, expense) => sum + expense.amount);
+  double get totalExpenses => _expenses.fold(
+        0,
+        (previousValue, expense) => previousValue + expense.amount,
+      );
 
   double get monthlyTotal {
     final now = DateTime.now();
     final monthlyExpenses = _expenses.where((expense) =>
         expense.date.year == now.year && expense.date.month == now.month);
-    return monthlyExpenses.fold(0.0, (sum, expense) => sum + expense.amount);
+    return monthlyExpenses.fold(
+      0.0,
+      (previousValue, expense) => previousValue + expense.amount,
+    );
   }
 
   Map<String, double> get categoryTotals {
@@ -35,15 +39,16 @@ class ExpenseProvider extends ChangeNotifier {
     return totals;
   }
 
-  // NEW: Returns total expenses for a specific month/year
   double getTotalExpensesForMonth(DateTime date) {
     return _expenses
         .where((expense) =>
             expense.date.year == date.year && expense.date.month == date.month)
-        .fold(0.0, (sum, expense) => sum + expense.amount);
+        .fold(
+          0.0,
+          (previousValue, expense) => previousValue + expense.amount,
+        );
   }
 
-  // NEW: Returns category totals sorted by amount descending
   List<MapEntry<String, double>> get sortedCategoryTotals {
     final totals = categoryTotals;
     final sortedList = totals.entries.toList();
@@ -51,7 +56,6 @@ class ExpenseProvider extends ChangeNotifier {
     return sortedList;
   }
 
-  // NEW: Returns list of expenses for a specific category
   List<ExpenseModel> getExpensesByCategory(String category) {
     return _expenses.where((expense) => expense.category == category).toList();
   }
@@ -66,20 +70,15 @@ class ExpenseProvider extends ChangeNotifier {
     try {
       _setLoading(true);
       _setError(null);
-
       final querySnapshot = await FirebaseService.expensesCollection
-          .where('userId', isEqualTo: uid) // 👈 USER-SPECIFIC FILTERING
+          .where('userId', isEqualTo: uid)
           .orderBy('date', descending: true)
           .get();
-
       _expenses = querySnapshot.docs
           .map((doc) => ExpenseModel.fromFirestore(doc))
           .toList();
-
-      print('✅ LOADED ${_expenses.length} EXPENSES FOR USER: $uid');
       notifyListeners();
     } catch (e) {
-      print('❌ ERROR LOADING EXPENSES: $e');
       _setError('Failed to load expenses: $e');
     } finally {
       _setLoading(false);
@@ -105,33 +104,27 @@ class ExpenseProvider extends ChangeNotifier {
     try {
       _setLoading(true);
       _setError(null);
-
       final expense = ExpenseModel(
         id: '',
-        userId: uid, // 👈 ENSURE USER-SPECIFIC
+        userId: uid,
         title: title,
         description: description,
         amount: amount,
         category: category,
-        subcategory: subcategory,
+        subcategory: subcategory ?? '',
         date: date,
         receiptUrl: receiptUrl,
         metadata: metadata,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
-
       final docRef =
           await FirebaseService.expensesCollection.add(expense.toFirestore());
-
       final newExpense = expense.copyWith(id: docRef.id);
       _expenses.insert(0, newExpense);
-
-      print('✅ ADDED EXPENSE FOR USER: $uid - ${expense.title}');
       notifyListeners();
       return true;
     } catch (e) {
-      print('❌ ERROR ADDING EXPENSE: $e');
       _setError('Failed to add expense: $e');
       return false;
     } finally {
@@ -149,18 +142,15 @@ class ExpenseProvider extends ChangeNotifier {
     try {
       _setLoading(true);
       _setError(null);
-
       await FirebaseService.expensesCollection
           .doc(updatedExpense.id)
           .update(updatedExpense.toFirestore());
-
       final index =
           _expenses.indexWhere((expense) => expense.id == updatedExpense.id);
       if (index != -1) {
         _expenses[index] = updatedExpense;
         notifyListeners();
       }
-
       return true;
     } catch (e) {
       _setError('Failed to update expense: $e');
@@ -180,17 +170,13 @@ class ExpenseProvider extends ChangeNotifier {
     try {
       _setLoading(true);
       _setError(null);
-
-      // Check if expense belongs to current user before deleting
       final expenseToDelete = _expenses.firstWhere((e) => e.id == expenseId);
       if (expenseToDelete.userId != uid) {
         _setError('Unauthorized to delete this expense');
         return false;
       }
-
       await FirebaseService.expensesCollection.doc(expenseId).delete();
       _expenses.removeWhere((expense) => expense.id == expenseId);
-
       notifyListeners();
       return true;
     } catch (e) {
@@ -199,6 +185,86 @@ class ExpenseProvider extends ChangeNotifier {
     } finally {
       _setLoading(false);
     }
+  }
+
+  Future<bool> addLoanPayment({
+    required String loanId,
+    required double amount,
+    required String description,
+    required DateTime date,
+  }) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      _setError('No authenticated user');
+      return false;
+    }
+
+    try {
+      _setLoading(true);
+      _setError(null);
+      final loanProvider =
+          LoanProvider(); // Direct init (assuming it's not widget-dependent)
+      final loan = loanProvider.loans.firstWhere(
+        (l) => l.id == loanId,
+        orElse: () => Loan(
+          // FIXED: Use Loan constructor with all required params
+          id: '',
+          userId: uid ?? '',
+          title: '',
+          amount: 0.0,
+          monthlyInstallment: 0.0,
+          remainingMonths: 0,
+          totalMonths: 0,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          startDate: DateTime.now(),
+        ),
+      );
+
+      if (loan.id.isEmpty) {
+        _setError('Loan not found');
+        return false;
+      }
+
+      final expenseData = {
+        'userId': uid,
+        'title': 'Loan Payment', // Added title
+        'amount': amount,
+        'category': 'Loan EMIs',
+        'subcategory': loan
+            .title, // FIXED: Use 'title' (your class has 'title', not 'name')
+        'description': description.isNotEmpty
+            ? description
+            : 'EMI Payment - ${loan.title}', // FIXED: Use 'title'
+        'date': Timestamp.fromDate(date),
+        'loanId': loanId,
+        'isLoanPayment': true,
+        'createdAt': FieldValue.serverTimestamp(),
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+
+      final docRef = await FirebaseFirestore.instance
+          .collection('expenses')
+          .add(expenseData);
+
+      await loanProvider.makePayment(loanId, amount);
+
+      final expense = ExpenseModel.fromFirestore(await docRef.get());
+      _expenses.insert(0, expense);
+      _calculateCategoryTotals(); // Define this method if needed or remove
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _setError('Failed to add loan payment: $e');
+      return false;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  void _calculateCategoryTotals() {
+// Implement if needed, or remove calls to it if not used
+    notifyListeners();
   }
 
   void _setLoading(bool loading) {

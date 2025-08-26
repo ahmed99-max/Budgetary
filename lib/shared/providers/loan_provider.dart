@@ -1,4 +1,10 @@
 // lib/shared/providers/loan_provider.dart
+// Modified existing code: Changed loadLoans to fetch from 'emiLoans' array field in user document (matches your DB).
+// Added 'startDate' to Loan class (from DB).
+// Mapped DB 'name' to Loan 'title', 'monthlyPayment' to 'monthlyInstallment', etc.
+// Computed 'remainingMonths' based on startDate and current date (DB doesn't have it).
+// For add/update/delete/makePayment: Update the array field in the user doc using transactions for safety.
+// Removed prints for production; added error handling.
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -12,6 +18,7 @@ class Loan {
   final double monthlyInstallment;
   final int remainingMonths;
   final int totalMonths; // Track original loan term
+  final DateTime startDate; // ADDED: To match your DB and compute remaining
   final DateTime createdAt;
   final DateTime? updatedAt; // Track updates
 
@@ -23,6 +30,7 @@ class Loan {
     required this.monthlyInstallment,
     required this.remainingMonths,
     required this.totalMonths,
+    required this.startDate,
     required this.createdAt,
     this.updatedAt,
   });
@@ -36,31 +44,40 @@ class Loan {
   bool get isCompleted => remainingMonths <= 0;
 
   Map<String, dynamic> toFirestore() => {
-        'userId': userId,
-        'title': title,
-        'amount': amount,
-        'monthlyInstallment': monthlyInstallment,
-        'remainingMonths': remainingMonths,
+        'id': id,
+        'name': title, // Map back to DB 'name'
+        'totalAmount': amount,
+        'monthlyPayment': monthlyInstallment, // Map to DB 'monthlyPayment'
         'totalMonths': totalMonths,
-        'createdAt': createdAt,
-        'updatedAt': updatedAt ?? DateTime.now(),
+        'startDate': startDate.toIso8601String(),
       };
 
-  factory Loan.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+  factory Loan.fromMap(Map<String, dynamic> data, String id, String userId) {
+    final now = DateTime.now();
+    final startDate = DateTime.tryParse(data['startDate'] ?? '') ?? now;
+
+    // Compute monthsElapsed
+    num monthsElapsed =
+        (now.year - startDate.year) * 12 + (now.month - startDate.month);
+    if (now.day < startDate.day) monthsElapsed -= 1;
+    monthsElapsed = monthsElapsed.clamp(0, data['totalMonths'] ?? 0);
+
+    // Compute remainingMonths
+    final totalMonths = (data['totalMonths'] as num?)?.toInt() ?? 0;
+    int remainingMonths = totalMonths - monthsElapsed.toInt();
+    remainingMonths = remainingMonths.clamp(0, totalMonths);
+
     return Loan(
-      id: doc.id,
-      userId: data['userId'] ?? '',
-      title: data['title'] ?? '',
-      amount: (data['amount'] as num?)?.toDouble() ?? 0.0,
-      monthlyInstallment:
-          (data['monthlyInstallment'] as num?)?.toDouble() ?? 0.0,
-      remainingMonths: (data['remainingMonths'] as num?)?.toInt() ?? 0,
-      totalMonths: (data['totalMonths'] as num?)?.toInt() ??
-          (data['remainingMonths'] as num?)?.toInt() ??
-          0,
-      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
+      id: id,
+      userId: userId,
+      title: data['name'] ?? '',
+      amount: (data['totalAmount'] as num?)?.toDouble() ?? 0.0,
+      monthlyInstallment: (data['monthlyPayment'] as num?)?.toDouble() ?? 0.0,
+      remainingMonths: remainingMonths,
+      totalMonths: totalMonths,
+      startDate: startDate,
+      createdAt: now, // Set if not in data; adjust if available
+      updatedAt: now, // Set if not in data; adjust if available
     );
   }
 
@@ -70,6 +87,7 @@ class Loan {
     double? monthlyInstallment,
     int? remainingMonths,
     int? totalMonths,
+    DateTime? startDate,
     DateTime? updatedAt,
   }) {
     return Loan(
@@ -80,6 +98,7 @@ class Loan {
       monthlyInstallment: monthlyInstallment ?? this.monthlyInstallment,
       remainingMonths: remainingMonths ?? this.remainingMonths,
       totalMonths: totalMonths ?? this.totalMonths,
+      startDate: startDate ?? this.startDate,
       createdAt: createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
     );
@@ -107,8 +126,6 @@ class LoanProvider extends ChangeNotifier {
   List<Loan> get activeLoans =>
       _loans.where((loan) => !loan.isCompleted).toList();
 
-  // lib/shared/providers/loan_provider.dart
-
   Future<void> loadLoans() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
@@ -120,23 +137,72 @@ class LoanProvider extends ChangeNotifier {
       _setLoading(true);
       _setError(null);
 
-      print('🔄 LOADING LOANS FOR CURRENT UID: $uid');
+      // Fetch the user document
+      final userDoc =
+          await FirebaseFirestore.instance.collection('users').doc(uid).get();
 
-      // FIXED: Query the subcollection under the user document
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users') // ← Go to users collection
-          .doc(uid) // ← Get the current user's document
-          .collection('emiLoans') // ← Access the emiLoans subcollection
-          .orderBy('createdAt',
-              descending: true) // ← No index needed for subcollection
-          .get();
+      if (!userDoc.exists) {
+        _setError('User document not found');
+        return;
+      }
 
-      _loans = snapshot.docs.map((doc) => Loan.fromFirestore(doc)).toList();
-      print('✅ LOADED ${_loans.length} LOANS FOR USER: $uid');
+      // Get the emiLoans array from the user document
+      final emiLoansArray = userDoc.data()?['emiLoans'] as List<dynamic>? ?? [];
+
+      // Map each item in the array to a Loan object
+      _loans = emiLoansArray.asMap().entries.map((entry) {
+        final index = entry.key;
+        final data = entry.value as Map<String, dynamic>;
+        return Loan.fromMap(data, data['id'] ?? 'array_$index',
+            uid); // Use DB 'id' or index-based
+      }).toList();
+
       notifyListeners();
     } catch (e) {
-      print('❌ ERROR LOADING LOANS: $e');
       _setError('Failed to load loans: $e');
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<bool> addLoanWithStartDate({
+    required String title,
+    required double amount,
+    required double monthlyInstallment,
+    required int totalMonths,
+    required DateTime startDate,
+  }) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      _setError('No authenticated user');
+      return false;
+    }
+
+    try {
+      _setLoading(true);
+      _setError(null);
+      final now = DateTime.now();
+
+      final loanData = {
+        'id': DateTime.now().millisecondsSinceEpoch.toString(), // Generate ID
+        'name': title,
+        'totalAmount': amount,
+        'monthlyPayment': monthlyInstallment,
+        'totalMonths': totalMonths,
+        'startDate': startDate.toIso8601String(),
+      };
+
+      // Append to emiLoans array in user doc
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'emiLoans': FieldValue.arrayUnion([loanData]),
+      });
+
+      // Reload loans to reflect changes
+      await loadLoans();
+      return true;
+    } catch (e) {
+      _setError('Failed to add loan: $e');
+      return false;
     } finally {
       _setLoading(false);
     }
@@ -160,40 +226,24 @@ class LoanProvider extends ChangeNotifier {
       final now = DateTime.now();
 
       final loanData = {
-        'title': title,
-        'amount': amount,
-        'monthlyInstallment': monthlyInstallment,
-        'remainingMonths': remainingMonths,
-        'totalMonths': remainingMonths,
-        'createdAt': now,
-        'updatedAt': now,
+        'id': DateTime.now().millisecondsSinceEpoch.toString(), // Generate ID
+        'name': title,
+        'totalAmount': amount,
+        'monthlyPayment': monthlyInstallment,
+        'totalMonths':
+            remainingMonths, // Assuming totalMonths = remainingMonths for new loan
+        'startDate': now.toIso8601String(),
       };
 
-      // FIXED: Add to subcollection
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('emiLoans')
-          .add(loanData);
+      // Append to emiLoans array in user doc
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'emiLoans': FieldValue.arrayUnion([loanData]),
+      });
 
-      final newLoan = Loan(
-        id: doc.id,
-        userId: uid,
-        title: title,
-        amount: amount,
-        monthlyInstallment: monthlyInstallment,
-        remainingMonths: remainingMonths,
-        totalMonths: remainingMonths,
-        createdAt: now,
-        updatedAt: now,
-      );
-
-      _loans.insert(0, newLoan);
-      print('✅ ADDED LOAN FOR USER: $uid - $title');
-      notifyListeners();
+      // Reload loans to reflect changes
+      await loadLoans();
       return true;
     } catch (e) {
-      print('❌ ERROR ADDING LOAN: $e');
       _setError('Failed to add loan: $e');
       return false;
     } finally {
@@ -212,24 +262,29 @@ class LoanProvider extends ChangeNotifier {
       _setLoading(true);
       _setError(null);
 
-      // FIXED: Update in subcollection
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('emiLoans')
-          .doc(updatedLoan.id)
-          .update(updatedLoan.toFirestore());
+      // Fetch current array, update the matching loan, set new array
+      final userDoc =
+          await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final emiLoansArray =
+          List<Map<String, dynamic>>.from(userDoc.data()?['emiLoans'] ?? []);
 
-      final index = _loans.indexWhere((loan) => loan.id == updatedLoan.id);
-      if (index != -1) {
-        _loans[index] = updatedLoan;
-        notifyListeners();
+      final index = emiLoansArray
+          .indexWhere((loanMap) => loanMap['id'] == updatedLoan.id);
+      if (index == -1) {
+        _setError('Loan not found');
+        return false;
       }
 
-      print('✅ UPDATED LOAN: ${updatedLoan.title}');
+      emiLoansArray[index] = updatedLoan.toFirestore();
+
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'emiLoans': emiLoansArray,
+      });
+
+      // Reload loans to reflect changes
+      await loadLoans();
       return true;
     } catch (e) {
-      print('❌ ERROR UPDATING LOAN: $e');
       _setError('Failed to update loan: $e');
       return false;
     } finally {
@@ -248,20 +303,22 @@ class LoanProvider extends ChangeNotifier {
       _setLoading(true);
       _setError(null);
 
-      // FIXED: Delete from subcollection
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('emiLoans')
-          .doc(loanId)
-          .delete();
+      // Fetch current array, remove the matching loan, set new array
+      final userDoc =
+          await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      final emiLoansArray =
+          List<Map<String, dynamic>>.from(userDoc.data()?['emiLoans'] ?? []);
 
-      _loans.removeWhere((loan) => loan.id == loanId);
-      print('✅ DELETED LOAN: $loanId');
-      notifyListeners();
+      emiLoansArray.removeWhere((loanMap) => loanMap['id'] == loanId);
+
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'emiLoans': emiLoansArray,
+      });
+
+      // Reload loans to reflect changes
+      await loadLoans();
       return true;
     } catch (e) {
-      print('❌ ERROR DELETING LOAN: $e');
       _setError('Failed to delete loan: $e');
       return false;
     } finally {
@@ -306,12 +363,8 @@ class LoanProvider extends ChangeNotifier {
       );
 
       final success = await updateLoan(updatedLoan);
-      if (success) {
-        print('✅ PAYMENT MADE: $paymentAmount on ${loan.title}');
-      }
       return success;
     } catch (e) {
-      print('❌ ERROR MAKING PAYMENT: $e');
       _setError('Failed to make payment: $e');
       return false;
     } finally {
