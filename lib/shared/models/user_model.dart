@@ -1,3 +1,4 @@
+// lib/shared/models/user_model.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class UserModel {
@@ -13,7 +14,7 @@ class UserModel {
   final Map<String, double> budgetCategories;
   final List<dynamic> emiLoans;
   final List<dynamic> investments;
-  final bool hasCompletedSetup;
+  final bool hasCompletedProfileSetup;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -30,7 +31,7 @@ class UserModel {
     required this.budgetCategories,
     required this.emiLoans,
     required this.investments,
-    required this.hasCompletedSetup,
+    required this.hasCompletedProfileSetup,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -46,12 +47,12 @@ class UserModel {
       country: data['country'] ?? '',
       city: data['city'] ?? '',
       currency: data['currency'] ?? 'USD',
-      monthlyIncome: (data['monthlyIncome'] ?? 0).toDouble(),
+      monthlyIncome: (data['monthlyIncome'] ?? 0.0).toDouble(),
       budgetCategories:
           Map<String, double>.from(data['budgetCategories'] ?? {}),
       emiLoans: List.from(data['emiLoans'] ?? []),
       investments: List.from(data['investments'] ?? []),
-      hasCompletedSetup: data['hasCompletedSetup'] ?? false,
+      hasCompletedProfileSetup: data['hasCompletedProfileSetup'] ?? true,
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
@@ -70,12 +71,13 @@ class UserModel {
       'budgetCategories': budgetCategories,
       'emiLoans': emiLoans,
       'investments': investments,
-      'hasCompletedSetup': hasCompletedSetup,
+      'hasCompletedProfileSetup': hasCompletedProfileSetup,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
   }
 
+  // Your copyWith method is preserved
   UserModel copyWith({
     String? name,
     String? email,
@@ -88,7 +90,7 @@ class UserModel {
     Map<String, double>? budgetCategories,
     List<dynamic>? emiLoans,
     List<dynamic>? investments,
-    bool? hasCompletedSetup,
+    bool? hasCompletedProfileSetup,
     DateTime? updatedAt,
   }) {
     return UserModel(
@@ -104,7 +106,8 @@ class UserModel {
       budgetCategories: budgetCategories ?? this.budgetCategories,
       emiLoans: emiLoans ?? this.emiLoans,
       investments: investments ?? this.investments,
-      hasCompletedSetup: hasCompletedSetup ?? this.hasCompletedSetup,
+      hasCompletedProfileSetup:
+          hasCompletedProfileSetup ?? this.hasCompletedProfileSetup,
       createdAt: createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
     );

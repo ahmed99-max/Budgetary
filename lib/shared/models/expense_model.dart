@@ -73,6 +73,7 @@ class ExpenseModel {
     String? receiptUrl,
     Map<String, dynamic>? metadata,
     DateTime? updatedAt,
+    required String id,
   }) {
     return ExpenseModel(
       id: id,

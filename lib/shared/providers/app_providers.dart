@@ -1,3 +1,4 @@
+import 'package:budgetary/shared/providers/loan_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:provider/single_child_widget.dart';
 
@@ -14,5 +15,6 @@ class AppProviders {
         ChangeNotifierProvider(create: (_) => UserProvider()),
         ChangeNotifierProvider(create: (_) => ExpenseProvider()),
         ChangeNotifierProvider(create: (_) => BudgetProvider()),
+        ChangeNotifierProvider(create: (_) => LoanProvider()),
       ];
 }

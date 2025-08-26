@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_theme.dart';
@@ -38,17 +38,42 @@ class BudgetOverviewWidget extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Budget Overview',
-            style: TextStyle(
-              fontSize: 20.sp,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-            ),
-          ),
+          Text('Budget Overview',
+              style: TextStyle(
+                fontSize: 20.sp,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              )),
           SizedBox(height: 20.h),
-
-          // Budget Progress Circle
+          // Use Wrap for responsiveness
+          Wrap(
+            spacing: 24.w,
+            runSpacing: 16.h,
+            alignment: WrapAlignment.spaceEvenly,
+            children: [
+              _buildStatItem(
+                  'Total Income',
+                  '$currency ${NumberFormat('#,##0').format(totalIncome)}',
+                  Colors.greenAccent),
+              _buildStatItem(
+                  'Total Budget Created',
+                  '$currency ${NumberFormat('#,##0').format(totalBudget)}',
+                  Colors.white),
+              _buildStatItem(
+                  'Remaining Available',
+                  '$currency ${NumberFormat('#,##0').format(remainingBudget)}',
+                  remainingBudget >= 0 ? Colors.greenAccent : Colors.redAccent),
+              _buildStatItem(
+                  'Spent',
+                  '$currency ${NumberFormat('#,##0').format(totalSpent)}',
+                  Colors.redAccent),
+              _buildStatItem(
+                  'Total Budget Utilised',
+                  '${budgetUsagePercentage.toStringAsFixed(0)}%',
+                  Colors.orangeAccent),
+            ],
+          ),
+          SizedBox(height: 24.h),
           Center(
             child: Stack(
               alignment: Alignment.center,
@@ -92,51 +117,6 @@ class BudgetOverviewWidget extends StatelessWidget {
               ],
             ),
           )
-              .animate()
-              .scale(begin: const Offset(0.8, 0.8))
-              .then()
-              .shimmer(duration: 2000.ms, color: Colors.white.withOpacity(0.2)),
-
-          SizedBox(height: 30.h),
-
-          // Budget Statistics
-          Row(
-            children: [
-              Expanded(
-                child: _buildStatItem(
-                  'Total Budget',
-                  '$currency ${NumberFormat('#,##0').format(totalBudget)}',
-                  Colors.white,
-                ),
-              ),
-              Expanded(
-                child: _buildStatItem(
-                  'Spent',
-                  '$currency ${NumberFormat('#,##0').format(totalSpent)}',
-                  budgetUsagePercentage > 100 ? Colors.red : Colors.white,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 16.h),
-          Row(
-            children: [
-              Expanded(
-                child: _buildStatItem(
-                  'Remaining',
-                  '$currency ${NumberFormat('#,##0').format(remainingBudget)}',
-                  remainingBudget >= 0 ? Colors.greenAccent : Colors.red,
-                ),
-              ),
-              Expanded(
-                child: _buildStatItem(
-                  'Income',
-                  '$currency ${NumberFormat('#,##0').format(totalIncome)}',
-                  Colors.white,
-                ),
-              ),
-            ],
-          ),
         ],
       ),
     );

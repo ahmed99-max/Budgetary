@@ -1,6 +1,6 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
 import '../../core/services/firebase_service.dart';
 import '../../core/services/hive_service.dart';
 import '../../core/services/navigation_service.dart';
@@ -11,7 +11,6 @@ class AuthProvider extends ChangeNotifier {
   String? _errorMessage;
   bool _hasCompletedProfileSetup = false;
 
-  // Getters
   User? get user => _user;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -23,22 +22,43 @@ class AuthProvider extends ChangeNotifier {
   }
 
   void _initialize() {
-    // Listen to auth state changes
     FirebaseService.auth.authStateChanges().listen((User? user) async {
-      _user = user;
-      if (user != null) {
-        await _checkProfileSetupStatus();
-      } else {
-        _hasCompletedProfileSetup = false;
+      try {
+        _user = user;
+        if (user != null) {
+          await _checkProfileSetupStatus();
+        } else {
+          _hasCompletedProfileSetup = false;
+        }
+        notifyListeners();
+      } catch (e) {
+        debugPrint('Error in authStateChanges listener: $e');
+        _setError('Authentication state error');
       }
-      notifyListeners();
     });
   }
 
   Future<void> _checkProfileSetupStatus() async {
     if (_user != null) {
-      final userData = await FirebaseService.getUserData(_user!.uid);
-      _hasCompletedProfileSetup = userData?['hasCompletedSetup'] ?? false;
+      final userDocRef = FirebaseService.getUserDocument(_user!.uid);
+      try {
+        final userDocSnapshot = await userDocRef.get();
+        if (userDocSnapshot.exists) {
+          final data = userDocSnapshot.data() as Map<String, dynamic>;
+          _hasCompletedProfileSetup = data['hasCompletedProfileSetup'] ?? false;
+        } else {
+          _hasCompletedProfileSetup = false;
+        }
+      } catch (e) {
+        await Future.delayed(const Duration(seconds: 1));
+        final userDocSnapshot = await userDocRef.get();
+        if (userDocSnapshot.exists) {
+          final data = userDocSnapshot.data() as Map<String, dynamic>;
+          _hasCompletedProfileSetup = data['hasCompletedProfileSetup'] ?? false;
+        } else {
+          _hasCompletedProfileSetup = false;
+        }
+      }
     }
   }
 
@@ -52,23 +72,18 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Authentication Methods
   Future<bool> signInWithEmail(String email, String password) async {
     try {
       _setLoading(true);
       _setError(null);
-
       await FirebaseService.auth.signInWithEmailAndPassword(
         email: email.trim(),
         password: password,
       );
-
+      await _checkProfileSetupStatus();
       return true;
     } on FirebaseAuthException catch (e) {
       _setError(_getAuthErrorMessage(e.code));
-      return false;
-    } catch (e) {
-      _setError('An unexpected error occurred');
       return false;
     } finally {
       _setLoading(false);
@@ -80,35 +95,59 @@ class AuthProvider extends ChangeNotifier {
     try {
       _setLoading(true);
       _setError(null);
-
       final credential =
           await FirebaseService.auth.createUserWithEmailAndPassword(
         email: email.trim(),
         password: password,
       );
-
       if (credential.user != null) {
         await credential.user!.updateDisplayName(name);
-        await credential.user!.reload();
-        _user = FirebaseService.auth.currentUser;
-
-        // Create user document in Firestore
+        _user = credential.user;
         await FirebaseService.createUserDocument(credential.user!.uid, {
           'name': name,
           'email': email.trim(),
-          'hasCompletedSetup': false,
+          'hasCompletedProfileSetup': false,
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+          'country': '',
+          'city': '',
+          'currency': 'USD',
+          'monthlyIncome': 0.0,
+          'budgetCategories': {},
+          'emiLoans': [],
+          'investments': [],
         });
+        return true;
       }
-
-      return true;
+      return false;
     } on FirebaseAuthException catch (e) {
       _setError(_getAuthErrorMessage(e.code));
       return false;
-    } catch (e) {
-      _setError('An unexpected error occurred');
-      return false;
     } finally {
       _setLoading(false);
+    }
+  }
+
+  Future<void> signOut() async {
+    // REMOVED context parameter
+    try {
+      _setLoading(true);
+      await FirebaseService.auth.signOut();
+      await HiveService.clearAllData();
+      _hasCompletedProfileSetup = false;
+      NavigationService.goToLanding(); // Direct navigation
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<void> completeProfileSetup() async {
+    if (_user != null) {
+      await FirebaseService.updateUserDocument(_user!.uid, {
+        'hasCompletedProfileSetup': true,
+      });
+      _hasCompletedProfileSetup = true;
+      notifyListeners();
     }
   }
 
@@ -116,7 +155,6 @@ class AuthProvider extends ChangeNotifier {
     try {
       _setLoading(true);
       _setError(null);
-
       await FirebaseService.auth.sendPasswordResetEmail(email: email.trim());
       return true;
     } on FirebaseAuthException catch (e) {
@@ -130,36 +168,6 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> signOut() async {
-    try {
-      _setLoading(true);
-      await FirebaseService.auth.signOut();
-      await HiveService.clearAllData();
-      _hasCompletedProfileSetup = false;
-      NavigationService.goToLanding();
-    } catch (e) {
-      _setError('Failed to sign out');
-    } finally {
-      _setLoading(false);
-    }
-  }
-
-  Future<void> completeProfileSetup() async {
-    if (_user != null) {
-      print('DEBUG: Completing profile setup in AuthProvider');
-      await FirebaseService.updateUserDocument(_user!.uid, {
-        'hasCompletedSetup': true,
-      });
-      _hasCompletedProfileSetup = true;
-      notifyListeners();
-    }
-  }
-
-  void clearError() {
-    _errorMessage = null;
-    notifyListeners();
-  }
-
   String _getAuthErrorMessage(String code) {
     switch (code) {
       case 'user-not-found':
@@ -168,14 +176,6 @@ class AuthProvider extends ChangeNotifier {
         return 'Wrong password provided.';
       case 'email-already-in-use':
         return 'An account already exists with this email.';
-      case 'weak-password':
-        return 'Password is too weak.';
-      case 'invalid-email':
-        return 'Email address is invalid.';
-      case 'user-disabled':
-        return 'This user account has been disabled.';
-      case 'too-many-requests':
-        return 'Too many attempts. Please try again later.';
       default:
         return 'Authentication failed. Please try again.';
     }

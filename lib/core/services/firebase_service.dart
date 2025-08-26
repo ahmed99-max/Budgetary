@@ -16,8 +16,8 @@ class FirebaseService {
 
   // Auth Methods
   static User? get currentUser => auth.currentUser;
-  static bool get isLoggedIn => currentUser != null;
-  static String get userId => currentUser?.uid ?? '';
+  static bool get isLoggedIn => auth.currentUser != null;
+  static String get userId => auth.currentUser?.uid ?? '';
 
   // Firestore Collections
   static CollectionReference get usersCollection =>
@@ -37,6 +37,18 @@ class FirebaseService {
   static Reference get storageRef => storage.ref();
   static Reference getUserStorageRef(String uid) =>
       storageRef.child('users').child(uid);
+
+  // NEW: user-scoped subcollections
+  static CollectionReference<Map<String, dynamic>> userLoansCollection(
+          String uid) =>
+      firestore.collection('users').doc(uid).collection('loans');
+
+  static CollectionReference<Map<String, dynamic>> userExpensesCollection(
+          String uid) =>
+      firestore.collection('users').doc(uid).collection('expenses');
+
+  // (optional) convenience for current user (throws if null)
+  static String get currentUid => auth.currentUser!.uid;
 
   // Helper Methods
   static Future<bool> checkUserExists(String uid) async {

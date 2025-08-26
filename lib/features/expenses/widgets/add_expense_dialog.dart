@@ -1,3 +1,4 @@
+// lib/features/expenses/widgets/add_expense_dialog.dart
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -9,6 +10,9 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/config/app_config.dart';
 import '../../../shared/providers/expense_provider.dart';
 import '../../../shared/providers/user_provider.dart';
+import '../../../shared/providers/budget_provider.dart'; // NEW: Import BudgetProvider
+import '../../../shared/providers/loan_provider.dart'; // NEW: Import LoanProvider for loan payments
+import '../widgets/loan_selection_dropdown.dart'; // NEW: Import LoanSelectionDropdown
 import '../../../shared/widgets/liquid_card.dart';
 import '../../../shared/widgets/liquid_button.dart';
 import '../../../shared/widgets/liquid_text_field.dart';
@@ -27,6 +31,7 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
   final _descriptionController = TextEditingController();
 
   String? _selectedCategory;
+  String? _selectedLoanId; // NEW: For selected loan when category is 'Loan'
   DateTime _selectedDate = DateTime.now();
 
   @override
@@ -94,13 +99,33 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
     final expenseProvider =
         Provider.of<ExpenseProvider>(context, listen: false);
     final success = await expenseProvider.addExpense(
-      userId: userId, // NEW: Pass userId
       title: _titleController.text.trim(), // NEW: Pass title
       description: _descriptionController.text.trim(),
       amount: amount,
       category: _selectedCategory!,
       date: _selectedDate,
     );
+
+    // NEW: If category is 'Loan' and a loan is selected, update the loan payment
+    if (success && _selectedCategory == 'Loan' && _selectedLoanId != null) {
+      final loanProvider = Provider.of<LoanProvider>(context, listen: false);
+      final paymentSuccess =
+          await loanProvider.makePayment(_selectedLoanId!, amount);
+      if (paymentSuccess) {
+        // Refresh budgets to reflect change
+        final budgetProvider =
+            Provider.of<BudgetProvider>(context, listen: false);
+        await budgetProvider.loadBudgets(
+            expenseProvider); // FIXED: Pass the required ExpenseProvider argument
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text(
+                  loanProvider.errorMessage ?? 'Failed to update loan payment'),
+              backgroundColor: Colors.red),
+        );
+      }
+    }
 
     if (success && mounted) {
       Navigator.of(context).pop();
@@ -124,7 +149,10 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
   @override
   Widget build(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
-    final categories = AppConfig.defaultCategories.keys.toList();
+    final budgetProvider =
+        Provider.of<BudgetProvider>(context); // NEW: Access BudgetProvider
+    final categories = budgetProvider
+        .getAllBudgetCategories(); // NEW: Use dynamic categories from BudgetProvider
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -219,12 +247,18 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                         icon: Icon(Icons.keyboard_arrow_down,
                             color: Colors.white),
                         items: categories.map((category) {
+                          final defaultIcon =
+                              AppConfig.defaultCategories[category] ?? '';
+                          final isCustom = defaultIcon.isEmpty;
+                          final iconText = isCustom
+                              ? '💼'
+                              : defaultIcon; // Default icon for custom
                           return DropdownMenuItem(
                             value: category,
                             child: Row(
                               children: [
                                 Text(
-                                  AppConfig.defaultCategories[category] ?? '',
+                                  iconText,
                                   style: TextStyle(fontSize: 18.sp),
                                 ),
                                 SizedBox(width: 12.w),
@@ -242,6 +276,8 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                         onChanged: (value) {
                           setState(() {
                             _selectedCategory = value;
+                            _selectedLoanId =
+                                null; // Reset loan selection when category changes
                           });
                         },
                       ),
@@ -250,6 +286,22 @@ class _AddExpenseDialogState extends State<AddExpenseDialog> {
                       .animate()
                       .fadeIn(delay: 200.ms, duration: 600.ms)
                       .slideX(begin: -0.3, end: 0),
+
+                  SizedBox(height: 20.h),
+
+                  // NEW: Conditional Loan Selection Dropdown if category is 'Loan'
+                  if (_selectedCategory ==
+                      'Loan') // Assuming 'Loan' is the exact category name
+                    LoanSelectionDropdown(
+                      selectedLoanId: _selectedLoanId,
+                      onLoanSelected: (loanId) {
+                        setState(() {
+                          _selectedLoanId = loanId;
+                        });
+                      },
+                      currency: userProvider
+                          .currency, // Pass the user's currency from UserProvider
+                    ),
 
                   SizedBox(height: 20.h),
 

@@ -27,6 +27,7 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _navigateToNext() async {
     await Future.delayed(const Duration(milliseconds: 3000));
+
     if (!mounted) return;
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     if (authProvider.isAuthenticated) {

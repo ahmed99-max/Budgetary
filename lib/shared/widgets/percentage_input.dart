@@ -5,14 +5,12 @@ class PercentageInput extends StatefulWidget {
   final double initialValue;
   final ValueChanged<double> onChanged;
   final String label;
-  final double maxValue;
 
   const PercentageInput({
     Key? key,
     required this.initialValue,
     required this.onChanged,
     required this.label,
-    this.maxValue = 50.0,
   }) : super(key: key);
 
   @override
@@ -26,7 +24,7 @@ class _PercentageInputState extends State<PercentageInput> {
   @override
   void initState() {
     super.initState();
-    _value = widget.initialValue;
+    _value = widget.initialValue.clamp(0, 100);
     _controller = TextEditingController(text: _value.toStringAsFixed(1));
   }
 
@@ -34,22 +32,22 @@ class _PercentageInputState extends State<PercentageInput> {
   void didUpdateWidget(PercentageInput oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.initialValue != widget.initialValue) {
-      _value = widget.initialValue;
+      _value = widget.initialValue.clamp(0, 100);
       _controller.text = _value.toStringAsFixed(1);
     }
   }
 
   void _updateValue(double newValue) {
     setState(() {
-      _value = newValue;
-      _controller.text = newValue.toStringAsFixed(1);
+      _value = newValue.clamp(0, 100);
+      _controller.text = _value.toStringAsFixed(1);
     });
     widget.onChanged(_value);
   }
 
   void _onFieldChanged(String text) {
     final parsed = double.tryParse(text);
-    if (parsed != null && parsed >= 0 && parsed <= widget.maxValue) {
+    if (parsed != null && parsed >= 0 && parsed <= 100) {
       _updateValue(parsed);
     }
   }
@@ -80,12 +78,12 @@ class _PercentageInputState extends State<PercentageInput> {
               width: 80.w,
               height: 36.h,
               decoration: BoxDecoration(
-                color: Colors
-                    .transparent, // Set to transparent to match background
+                color: Colors.white.withOpacity(0.9),
                 borderRadius: BorderRadius.circular(8.r),
                 border: Border.all(
-                    color: Colors.white.withOpacity(0.3),
-                    width: 1), // Optional subtle border for visibility
+                  color: Colors.grey.shade300,
+                  width: 1,
+                ),
               ),
               child: TextFormField(
                 controller: _controller,
@@ -94,13 +92,13 @@ class _PercentageInputState extends State<PercentageInput> {
                 style: TextStyle(
                   fontSize: 14.sp,
                   fontWeight: FontWeight.w700,
-                  color: Colors.white,
+                  color: Colors.black,
                 ),
                 decoration: InputDecoration(
                   suffixText: '%',
                   suffixStyle: TextStyle(
                     fontSize: 12.sp,
-                    color: Colors.white.withOpacity(0.7),
+                    color: Colors.black54,
                   ),
                   border: InputBorder.none,
                   contentPadding: EdgeInsets.symmetric(horizontal: 8.w),
@@ -122,8 +120,8 @@ class _PercentageInputState extends State<PercentageInput> {
           child: Slider(
             value: _value,
             min: 0.0,
-            max: widget.maxValue,
-            divisions: (widget.maxValue * 2).toInt(),
+            max: 100.0, // Fixed to 100
+            divisions: 200,
             onChanged: _updateValue,
           ),
         ),

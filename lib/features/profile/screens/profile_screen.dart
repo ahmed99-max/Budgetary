@@ -374,7 +374,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              Provider.of<AuthProvider>(context, listen: false).signOut();
+              Provider.of<AuthProvider>(context, listen: false)
+                  .signOut(); // NO context parameter
             },
             child: Text('Sign Out'),
           ),

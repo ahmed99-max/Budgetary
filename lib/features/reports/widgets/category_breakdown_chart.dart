@@ -1,3 +1,4 @@
+// lib/features/reports/widgets/category_breakdown_chart.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -46,21 +47,37 @@ class CategoryBreakdownChart extends StatelessWidget {
     }
 
     final sortedExpenses = expenses.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
-    final total = expenses.values.fold<double>(0, (sum, value) => sum + value);
+      ..sort((a, b) =>
+          b.value.compareTo(a.value)); // Ensure compareTo for int return
+    final total = expenses.values
+        .fold(0.0, (sum, value) => sum + value); // Use double for sum
 
     return Container(
       height: 300.h,
       child: Column(
         children: [
-          // Bar chart
+          // Bar chart with enhanced styling
           Expanded(
             child: BarChart(
               BarChartData(
                 alignment: BarChartAlignment.spaceAround,
                 maxY: sortedExpenses.first.value * 1.2,
-                barTouchData: BarTouchData(enabled: false),
+                barTouchData: BarTouchData(
+                  enabled: true, // Enhanced: Enable touch for tooltips
+                  touchTooltipData: BarTouchTooltipData(
+                    tooltipBgColor: Colors.white.withOpacity(0.8),
+                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                      final category = sortedExpenses[group.x.toInt()].key;
+                      final value = rod.toY;
+                      return BarTooltipItem(
+                        '$category\n$currency${value.toStringAsFixed(0)}',
+                        TextStyle(
+                            color: AppTheme.primaryPurple,
+                            fontWeight: FontWeight.bold),
+                      );
+                    },
+                  ),
+                ),
                 titlesData: FlTitlesData(
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
@@ -108,7 +125,10 @@ class CategoryBreakdownChart extends StatelessWidget {
                   rightTitles:
                       AxisTitles(sideTitles: SideTitles(showTitles: false)),
                 ),
-                borderData: FlBorderData(show: false),
+                borderData: FlBorderData(
+                  show: true, // Enhanced: Subtle border
+                  border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                ),
                 gridData: FlGridData(show: false),
                 barGroups: sortedExpenses.asMap().entries.map((entry) {
                   return BarChartGroupData(
@@ -125,7 +145,14 @@ class CategoryBreakdownChart extends StatelessWidget {
                           ],
                         ),
                         width: 20.w,
-                        borderRadius: BorderRadius.circular(4.r),
+                        borderRadius: BorderRadius.circular(
+                            8.r), // Rounded bars for appeal
+                        backDrawRodData: BackgroundBarChartRodData(
+                          show: true,
+                          toY: sortedExpenses.first.value * 1.2,
+                          color:
+                              Colors.grey.withOpacity(0.1), // Subtle background
+                        ),
                       ),
                     ],
                   );
@@ -139,27 +166,28 @@ class CategoryBreakdownChart extends StatelessWidget {
                 .shimmer(
                     duration: 2000.ms, color: Colors.white.withOpacity(0.1)),
           ),
-
           SizedBox(height: 20.h),
-
-          // Category list with percentages
-          ...sortedExpenses.take(5).map((entry) {
-            final percentage = (entry.value / total) * 100;
-            return Container(
-              margin: EdgeInsets.only(bottom: 8.h),
-              child: Row(
-                children: [
-                  Container(
-                    width: 12.w,
-                    height: 12.w,
-                    decoration: BoxDecoration(
-                      color: _getCategoryColor(sortedExpenses.indexOf(entry)),
-                      shape: BoxShape.circle,
+          // Enhanced: Added legend for categories
+          Wrap(
+            spacing: 8.w,
+            runSpacing: 4.h,
+            children: sortedExpenses.take(5).map((entry) {
+              final percentage = (entry.value / total) * 100;
+              return Container(
+                margin: EdgeInsets.only(bottom: 8.h),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 12.w,
+                      height: 12.w,
+                      decoration: BoxDecoration(
+                        color: _getCategoryColor(sortedExpenses.indexOf(entry)),
+                        shape: BoxShape.circle,
+                      ),
                     ),
-                  ),
-                  SizedBox(width: 8.w),
-                  Expanded(
-                    child: Text(
+                    SizedBox(width: 8.w),
+                    Text(
                       entry.key,
                       style: TextStyle(
                         fontSize: 12.sp,
@@ -167,33 +195,34 @@ class CategoryBreakdownChart extends StatelessWidget {
                         color: Colors.grey.shade700,
                       ),
                     ),
-                  ),
-                  Text(
-                    '${percentage.toStringAsFixed(1)}%',
-                    style: TextStyle(
-                      fontSize: 12.sp,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade600,
+                    SizedBox(width: 8.w),
+                    Text(
+                      '${percentage.toStringAsFixed(1)}%',
+                      style: TextStyle(
+                        fontSize: 12.sp,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade600,
+                      ),
                     ),
-                  ),
-                  SizedBox(width: 8.w),
-                  Text(
-                    '$currency ${NumberFormat('#,##0').format(entry.value)}',
-                    style: TextStyle(
-                      fontSize: 12.sp,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.grey.shade800,
+                    SizedBox(width: 8.w),
+                    Text(
+                      '$currency ${NumberFormat('#,##0').format(entry.value)}',
+                      style: TextStyle(
+                        fontSize: 12.sp,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.grey.shade800,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            )
-                .animate()
-                .fadeIn(
-                    delay: Duration(
-                        milliseconds: 200 * sortedExpenses.indexOf(entry)))
-                .slideX(begin: 0.3, end: 0);
-          }).toList(),
+                  ],
+                ),
+              )
+                  .animate()
+                  .fadeIn(
+                      delay: Duration(
+                          milliseconds: 200 * sortedExpenses.indexOf(entry)))
+                  .slideX(begin: 0.3, end: 0);
+            }).toList(),
+          ),
         ],
       ),
     );

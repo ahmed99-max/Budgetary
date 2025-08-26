@@ -6,10 +6,11 @@ class BudgetModel {
   final String category;
   final double allocatedAmount;
   final double spentAmount;
-  final String period; // 'monthly', 'weekly', 'yearly'
+  final String period;
   final DateTime startDate;
   final DateTime endDate;
   final bool isActive;
+  final bool isLoan; // New flag for loan budgets
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -23,6 +24,7 @@ class BudgetModel {
     required this.startDate,
     required this.endDate,
     required this.isActive,
+    this.isLoan = false,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -35,10 +37,11 @@ class BudgetModel {
       category: data['category'] ?? '',
       allocatedAmount: (data['allocatedAmount'] ?? 0).toDouble(),
       spentAmount: (data['spentAmount'] ?? 0).toDouble(),
-      period: data['period'] ?? 'monthly',
+      period: data['period'] ?? '',
       startDate: (data['startDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
       endDate: (data['endDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
       isActive: data['isActive'] ?? true,
+      isLoan: data['isLoan'] ?? false, // New
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (data['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
@@ -54,12 +57,15 @@ class BudgetModel {
       'startDate': Timestamp.fromDate(startDate),
       'endDate': Timestamp.fromDate(endDate),
       'isActive': isActive,
+      'isLoan': isLoan, // New
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
   }
 
   BudgetModel copyWith({
+    String? id,
+    String? userId,
     String? category,
     double? allocatedAmount,
     double? spentAmount,
@@ -67,11 +73,13 @@ class BudgetModel {
     DateTime? startDate,
     DateTime? endDate,
     bool? isActive,
+    bool? isLoan,
+    DateTime? createdAt,
     DateTime? updatedAt,
   }) {
     return BudgetModel(
-      id: id,
-      userId: userId,
+      id: id ?? this.id,
+      userId: userId ?? this.userId,
       category: category ?? this.category,
       allocatedAmount: allocatedAmount ?? this.allocatedAmount,
       spentAmount: spentAmount ?? this.spentAmount,
@@ -79,27 +87,12 @@ class BudgetModel {
       startDate: startDate ?? this.startDate,
       endDate: endDate ?? this.endDate,
       isActive: isActive ?? this.isActive,
-      createdAt: createdAt,
-      updatedAt: updatedAt ?? DateTime.now(),
+      isLoan: isLoan ?? this.isLoan,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 
-  // Helper getters
-  double get remainingAmount => allocatedAmount - spentAmount;
-  double get spentPercentage =>
-      allocatedAmount > 0 ? (spentAmount / allocatedAmount) * 100 : 0;
   bool get isOverBudget => spentAmount > allocatedAmount;
-  bool get isNearLimit => spentPercentage >= 80;
-
-  String getFormattedAllocated(String currency) {
-    return '$currency ${allocatedAmount.toStringAsFixed(2)}';
-  }
-
-  String getFormattedSpent(String currency) {
-    return '$currency ${spentAmount.toStringAsFixed(2)}';
-  }
-
-  String getFormattedRemaining(String currency) {
-    return '$currency ${remainingAmount.toStringAsFixed(2)}';
-  }
+  bool get isNearLimit => spentAmount >= allocatedAmount * 0.8;
 }

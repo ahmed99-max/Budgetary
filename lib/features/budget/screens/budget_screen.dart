@@ -1,4 +1,8 @@
+// lib/features/budget/screens/budget_screen.dart
+
+import 'package:budgetary/features/loan/widgets/add_loan_dialog.dart';
 import 'package:budgetary/shared/models/budget_model.dart';
+import 'package:budgetary/shared/providers/loan_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -7,14 +11,14 @@ import 'package:intl/intl.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/providers/user_provider.dart';
-import '../../../shared/providers/budget_provider.dart';
 import '../../../shared/providers/expense_provider.dart';
+import '../../../shared/providers/budget_provider.dart';
 import '../../../shared/widgets/liquid_card.dart';
 import '../../../shared/widgets/liquid_button.dart';
-import '../widgets/budget_overview_widget.dart';
+import '../widgets/budget_summary_card.dart';
 import '../widgets/budget_category_item.dart';
 import '../widgets/add_budget_dialog.dart';
-import '../../../core/utils/currency_utils.dart';
+import '../widgets/loan_card_widget.dart';
 
 class BudgetScreen extends StatefulWidget {
   const BudgetScreen({super.key});
@@ -27,270 +31,243 @@ class _BudgetScreenState extends State<BudgetScreen> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadData();
+    });
   }
 
   Future<void> _loadData() async {
+    print("🎯 BUDGET SCREEN: Starting _loadData()");
     final userProvider = Provider.of<UserProvider>(context, listen: false);
-    final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
     final expenseProvider =
         Provider.of<ExpenseProvider>(context, listen: false);
+    final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
+    final loanProvider = Provider.of<LoanProvider>(context, listen: false);
+
+    print("👤 User exists: ${userProvider.hasUser}");
+    if (userProvider.hasUser) {
+      print("👤 User ID: ${userProvider.user!.uid}");
+      print("📧 User email: ${userProvider.user!.email}");
+    }
 
     if (userProvider.hasUser) {
-      // Load auto-generated budgets from profile
-      budgetProvider.loadUserBudgets(userProvider.user!);
-
       await Future.wait([
-        budgetProvider.loadBudgets(userProvider.user!.uid),
-        expenseProvider.loadExpenses(userProvider.user!.uid),
+        expenseProvider.loadExpenses(),
+        budgetProvider.loadBudgets(expenseProvider),
+        loanProvider.loadLoans(), // 👈 LOAD LOANS
       ]);
+      budgetProvider.loadUserBudgets(userProvider.user!);
+      print("✅ BUDGET SCREEN: Load completed");
+    } else {
+      print("❌ BUDGET SCREEN: No user found");
     }
+  }
+
+  void _showAddBudgetDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AddBudgetDialog(
+        onBudgetCreated: _loadData,
+      ),
+    );
+  }
+
+  Future<void> _deleteBudget(String budgetId) async {
+    final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Delete Budget'),
+        content: Text('Are you sure you want to delete this budget category?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      final success = await budgetProvider.deleteBudget(budgetId);
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Budget category deleted successfully'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content:
+                Text(budgetProvider.errorMessage ?? 'Failed to delete budget'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
+    }
+  }
+
+  void _editBudget(String budgetId) {
+    // TODO: Implement edit functionality
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Edit feature coming soon!'),
+        backgroundColor: AppTheme.primaryPurple,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer3<UserProvider, BudgetProvider, ExpenseProvider>(
-      builder: (context, userProvider, budgetProvider, expenseProvider, _) {
+    return Consumer4<UserProvider, ExpenseProvider, BudgetProvider,
+        LoanProvider>(
+      builder: (context, userProvider, expenseProvider, budgetProvider,
+          loanProvider, _) {
         if (!userProvider.hasUser) {
           return const Center(child: CircularProgressIndicator());
         }
 
         final user = userProvider.user!;
+        final budgets = budgetProvider.budgets;
+        final loans = loanProvider.loans;
+        final isLoading = budgetProvider.isLoading || loanProvider.isLoading;
 
         return Scaffold(
           body: Container(
-            decoration: const BoxDecoration(
-              gradient: AppTheme.liquidBackground,
-            ),
+            decoration:
+                const BoxDecoration(gradient: AppTheme.liquidBackground),
             child: SafeArea(
               child: RefreshIndicator(
                 onRefresh: _loadData,
                 child: SingleChildScrollView(
                   padding: EdgeInsets.all(20.w),
+                  physics: const AlwaysScrollableScrollPhysics(),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Header
-                      Text(
-                        'Budget Management 💰',
-                        style: TextStyle(
-                          fontSize: 28.sp,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                          shadows: [
-                            Shadow(
-                              color: Colors.black.withOpacity(0.2),
-                              offset: const Offset(0, 2),
-                              blurRadius: 8,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Budget Manager 💰',
+                                style: TextStyle(
+                                  fontSize: 28.sp,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                  shadows: [
+                                    Shadow(
+                                      color: Colors.black.withOpacity(0.2),
+                                      offset: const Offset(0, 2),
+                                      blurRadius: 8,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              SizedBox(height: 4.h),
+                              Text(
+                                'Track and manage your spending',
+                                style: TextStyle(
+                                  fontSize: 16.sp,
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.white.withOpacity(0.8),
+                                ),
+                              ),
+                            ],
+                          ),
+                          Container(
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 12.w, vertical: 6.h),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.white.withOpacity(0.2),
+                                  Colors.white.withOpacity(0.1),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(20.r),
                             ),
-                          ],
-                        ),
+                            child: Text(
+                              DateFormat('MMM yyyy').format(DateTime.now()),
+                              style: TextStyle(
+                                fontSize: 12.sp,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
                       )
                           .animate()
                           .fadeIn(duration: 800.ms)
                           .slideY(begin: -0.3, end: 0),
-
-                      SizedBox(height: 8.h),
-
-                      Text(
-                        'Track and manage your spending limits',
-                        style: TextStyle(
-                          fontSize: 16.sp,
-                          fontWeight: FontWeight.w500,
-                          color: Colors.white.withOpacity(0.8),
-                        ),
-                      )
-                          .animate()
-                          .fadeIn(delay: 200.ms, duration: 800.ms)
-                          .slideY(begin: -0.2, end: 0),
-
                       SizedBox(height: 30.h),
 
-                      // Budget Overview
-                      BudgetOverviewWidget(
-                        totalIncome: user.monthlyIncome,
-                        totalBudget: budgetProvider.totalAllocated,
-                        totalSpent: budgetProvider.totalSpent,
-                        currency: user.currency,
+                      // Budget Summary Card
+                      BudgetSummaryCard(
+                        user: user,
+                        budgetProvider: budgetProvider,
+                        expenseProvider: expenseProvider,
                       )
                           .animate()
-                          .fadeIn(delay: 400.ms, duration: 1000.ms)
+                          .fadeIn(delay: 200.ms, duration: 1000.ms)
                           .slideY(begin: 0.3, end: 0),
+                      SizedBox(height: 24.h),
 
+                      // Loans Section - NEW!
+                      _buildLoansSection(
+                          loans, user.currency, loanProvider.isLoading),
                       SizedBox(height: 24.h),
 
                       // Add Budget Button
                       LiquidButton(
-                        text: 'Add New Budget',
+                        text: 'Add Budget Category',
                         gradient: LinearGradient(
                           colors: [
-                            Colors.white.withOpacity(0.9),
-                            Colors.white.withOpacity(0.7),
+                            AppTheme.primaryPurple,
+                            AppTheme.primaryBlue,
                           ],
                         ),
-                        onPressed: () => _showAddBudgetDialog(),
-                        icon: Icons.add_circle_rounded,
+                        onPressed: _showAddBudgetDialog,
+                        icon: Icons.add_rounded,
                       )
                           .animate()
-                          .fadeIn(delay: 600.ms, duration: 800.ms)
+                          .fadeIn(delay: 400.ms, duration: 600.ms)
                           .slideY(begin: 0.3, end: 0),
-
                       SizedBox(height: 24.h),
 
-                      // NEW: Auto-Generated Budgets Section
-                      LiquidCard(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Auto-Generated Budgets',
-                              style: TextStyle(
-                                fontSize: 20.sp,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.grey.shade800,
-                              ),
-                            ),
-                            SizedBox(height: 20.h),
-                            if (budgetProvider.autoBudgets.isEmpty)
-                              Center(
-                                child: Text(
-                                  'No auto-generated budgets yet. Complete your profile setup.',
-                                  style: TextStyle(
-                                    fontSize: 14.sp,
-                                    color: Colors.grey.shade500,
-                                  ),
-                                  textAlign: TextAlign.center,
-                                ),
-                              )
-                            else
-                              Column(
-                                children: budgetProvider.autoBudgets.entries
-                                    .map((entry) {
-                                  final spent = expenseProvider
-                                          .categoryTotals[entry.key] ??
-                                      0;
-                                  return BudgetCategoryItem(
-                                    budget: BudgetModel(
-                                      id: '', // Placeholder for auto-budgets
-                                      userId: user.uid,
-                                      category: entry.key,
-                                      allocatedAmount: entry.value,
-                                      spentAmount: spent,
-                                      period: 'monthly', // Default
-                                      startDate: DateTime.now(),
-                                      endDate: DateTime.now()
-                                          .add(Duration(days: 30)),
-                                      isActive: true,
-                                      createdAt: DateTime.now(),
-                                      updatedAt: DateTime.now(),
-                                    ),
-                                    spent: spent,
-                                    currency: user.currency,
-                                    onEdit:
-                                        () {}, // Optional: Disable edit for auto
-                                    onDelete:
-                                        () {}, // Optional: Disable delete for auto
-                                  );
-                                }).toList(),
-                              ),
-                          ],
-                        ),
-                      )
-                          .animate()
-                          .fadeIn(delay: 800.ms, duration: 1000.ms)
-                          .slideY(begin: 0.3, end: 0),
-
-                      SizedBox(height: 24.h),
-
-                      // Budget Categories (your existing manual budgets)
-                      if (budgetProvider.activeBudgets.isNotEmpty) ...[
-                        LiquidCard(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Your Budgets',
-                                style: TextStyle(
-                                  fontSize: 20.sp,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.grey.shade800,
+                      // Budget Categories
+                      isLoading
+                          ? Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(40.h),
+                                child: CircularProgressIndicator(
+                                  valueColor:
+                                      AlwaysStoppedAnimation(Colors.white),
                                 ),
                               ),
-                              SizedBox(height: 20.h),
-                              Column(
-                                children:
-                                    budgetProvider.activeBudgets.map((budget) {
-                                  final spent = expenseProvider
-                                          .categoryTotals[budget.category] ??
-                                      0;
-                                  return BudgetCategoryItem(
-                                    budget: budget,
-                                    spent: spent,
-                                    currency: user.currency,
-                                    onEdit: () => _editBudget(budget),
-                                    onDelete: () => _deleteBudget(budget),
-                                  );
-                                }).toList(),
-                              ),
-                            ],
-                          ),
-                        )
-                            .animate()
-                            .fadeIn(delay: 800.ms, duration: 1000.ms)
-                            .slideY(begin: 0.3, end: 0),
-                      ] else ...[
-                        // Empty state
-                        LiquidCard(
-                          child: Container(
-                            width: double.infinity,
-                            padding: EdgeInsets.all(40.w),
-                            child: Column(
-                              children: [
-                                Icon(
-                                  Icons.pie_chart_outline_rounded,
-                                  size: 80.sp,
-                                  color: Colors.grey.shade400,
-                                ),
-                                SizedBox(height: 20.h),
-                                Text(
-                                  'No Budgets Yet',
-                                  style: TextStyle(
-                                    fontSize: 20.sp,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                ),
-                                SizedBox(height: 12.h),
-                                Text(
-                                  'Create your first budget to start tracking your spending limits and achieve your financial goals.',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 14.sp,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.grey.shade500,
-                                    height: 1.4,
-                                  ),
-                                ),
-                                SizedBox(height: 30.h),
-                                LiquidButton(
-                                  text: 'Create First Budget',
-                                  gradient: AppTheme.liquidBackground,
-                                  onPressed: () => _showAddBudgetDialog(),
-                                  icon: Icons.add_circle_rounded,
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                            .animate()
-                            .fadeIn(delay: 800.ms, duration: 1000.ms)
-                            .slideY(begin: 0.3, end: 0)
-                            .then()
-                            .shimmer(
-                              duration: 2000.ms,
-                              color: AppTheme.primaryPurple.withOpacity(0.1),
-                            ),
-                      ],
+                            )
+                          : (budgets.isEmpty
+                              ? _buildEmptyState()
+                              : _buildBudgetsList(
+                                  budgets, expenseProvider, user.currency)),
 
                       SizedBox(height: 100.h), // Space for bottom nav
                     ],
@@ -304,23 +281,217 @@ class _BudgetScreenState extends State<BudgetScreen> {
     );
   }
 
-  void _showAddBudgetDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AddBudgetDialog(
-        onBudgetCreated: () {
-          _loadData();
-        },
+  // In your budget_screen.dart, update the _buildLoansSection method:
+
+  Widget _buildLoansSection(List<Loan> loans, String currency, bool isLoading) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Loans 🏦',
+              style: TextStyle(
+                fontSize: 20.sp,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+            TextButton.icon(
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (ctx) => AddLoanDialog(
+                    onLoanUpdated: _loadData,
+                  ),
+                );
+              },
+              icon: Icon(Icons.add, color: Colors.white, size: 16.sp),
+              label: Text(
+                'Add Loan',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 12.sp,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              style: TextButton.styleFrom(
+                backgroundColor: Colors.white.withOpacity(0.2),
+                padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 6.h),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8.r),
+                ),
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: 16.h),
+        if (isLoading)
+          Center(
+            child: Padding(
+              padding: EdgeInsets.all(40.h),
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation(Colors.white),
+              ),
+            ),
+          )
+        else if (loans.isEmpty)
+          _buildNoLoansCard()
+        else
+          Column(
+            children: loans.asMap().entries.map((entry) {
+              final index = entry.key;
+              final loan = entry.value;
+              return Container(
+                margin: EdgeInsets.only(bottom: 12.h),
+                child: LoanCardWidget(
+                  // This now uses the enhanced version
+                  loan: loan,
+                  currency: currency,
+                  onUpdated: _loadData,
+                ),
+              )
+                  .animate()
+                  .fadeIn(delay: Duration(milliseconds: 600 + (index * 100)))
+                  .slideX(begin: 0.3, end: 0);
+            }).toList(),
+          ),
+      ],
+    )
+        .animate()
+        .fadeIn(delay: 300.ms, duration: 1000.ms)
+        .slideY(begin: 0.3, end: 0);
+  }
+
+  // In budget_screen.dart
+  Widget _buildNoLoansCard() {
+    return LiquidCard(
+      child: Container(
+        height: 120.h,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.account_balance,
+                size: 48.sp,
+                color: Colors.grey.shade400,
+              ),
+              SizedBox(height: 12.h),
+              Text(
+                'No loans yet',
+                style: TextStyle(
+                  fontSize: 16.sp,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+              SizedBox(height: 4.h),
+              Text(
+                'Add loans from your profile to track here',
+                style: TextStyle(
+                  fontSize: 12.sp,
+                  color: Colors.grey.shade500,
+                ),
+              ),
+              SizedBox(height: 8.h),
+              ElevatedButton.icon(
+                // ADDED: Add Loan button
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AddLoanDialog(),
+                  ).then((_) => _loadData()); // Reload after add
+                },
+                icon: Icon(Icons.add),
+                label: Text('Add Loan'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryPurple,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  void _editBudget(budget) {
-    // Implementation for editing budget
+  Widget _buildBudgetsList(List<BudgetModel> budgets,
+      ExpenseProvider expenseProvider, String currency) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Budget Categories',
+          style: TextStyle(
+            fontSize: 20.sp,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+          ),
+        ),
+        SizedBox(height: 16.h),
+        Column(
+          children: budgets.asMap().entries.map((entry) {
+            final index = entry.key;
+            final budget = entry.value;
+            final spent =
+                expenseProvider.categoryTotals[budget.category] ?? 0.0;
+            return Container(
+              margin: EdgeInsets.only(bottom: 16.h),
+              child: BudgetCategoryItem(
+                budget: budget,
+                spent: spent,
+                currency: currency,
+                onDelete: () => _deleteBudget(budget.id),
+                onEdit: () => _editBudget(budget.id),
+              ),
+            )
+                .animate()
+                .fadeIn(delay: Duration(milliseconds: 600 + (index * 100)))
+                .slideX(begin: 0.3, end: 0);
+          }).toList(),
+        ),
+      ],
+    );
   }
 
-  void _deleteBudget(budget) async {
-    final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
-    await budgetProvider.deleteBudget(budget.id);
+  Widget _buildEmptyState() {
+    return LiquidCard(
+      child: Container(
+        height: 200.h,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.pie_chart_outline_rounded,
+                size: 64.sp,
+                color: Colors.grey.shade400,
+              ),
+              SizedBox(height: 16.h),
+              Text(
+                'No budgets yet',
+                style: TextStyle(
+                  fontSize: 18.sp,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+              SizedBox(height: 8.h),
+              Text(
+                'Create your first budget category\nto start tracking your spending',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14.sp,
+                  color: Colors.grey.shade500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ).animate().fadeIn(delay: 600.ms).scale(begin: const Offset(0.8, 0.8));
   }
 }

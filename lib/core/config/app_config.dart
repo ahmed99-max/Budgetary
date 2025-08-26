@@ -1,3 +1,4 @@
+import 'package:budgetary/shared/providers/budget_provider.dart';
 import 'package:flutter/material.dart';
 
 class AppConfig {
@@ -71,4 +72,13 @@ class AppConfig {
     "Financial freedom starts with smart choices! 🚀",
     "Track your spending, secure your future! 💎",
   ];
+
+  static List<String> getAllCategories(BudgetProvider budgetProvider) {
+    final defaultCats = defaultCategories.keys.toList();
+    final customCats = budgetProvider
+        .getAllBudgetCategories()
+        .where((cat) => !defaultCategories.containsKey(cat))
+        .toList();
+    return [...defaultCats, ...customCats];
+  }
 }

@@ -1,19 +1,25 @@
+// lib/features/dashboard/screens/dashboard_screen.dart
+
+import 'package:budgetary/features/dashboard/widgets/loan_overview_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // FIXED: Added for UID
 
 import '../../../core/theme/app_theme.dart';
-import '../../../core/config/app_config.dart';
 import '../../../shared/providers/user_provider.dart';
 import '../../../shared/providers/expense_provider.dart';
 import '../../../shared/providers/budget_provider.dart';
+import '../../../shared/providers/loan_provider.dart'; // FIXED: Added for LoanProvider
 import '../../../shared/widgets/liquid_card.dart';
-import '../widgets/expense_chart_widget.dart';
-import '../widgets/category_progress_widget.dart';
+import '../widgets/balance_overview_card.dart';
+import '../widgets/quick_actions_widget.dart';
 import '../widgets/recent_transactions_widget.dart';
+import '../widgets/budget_overview_card.dart';
+import '../widgets/spending_insights_widget.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -23,24 +29,60 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  bool _isInitialLoading = true;
+  String? _loadingError;
+
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _preloadDashboardData();
   }
 
-  Future<void> _loadData() async {
-    final userProvider = Provider.of<UserProvider>(context, listen: false);
-    final expenseProvider =
-        Provider.of<ExpenseProvider>(context, listen: false);
-    final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
+  Future<void> _preloadDashboardData() async {
+    try {
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final expenseProvider =
+          Provider.of<ExpenseProvider>(context, listen: false);
+      final budgetProvider =
+          Provider.of<BudgetProvider>(context, listen: false);
+      final loanProvider = Provider.of<LoanProvider>(context,
+          listen: false); // FIXED: Added LoanProvider
 
-    if (userProvider.hasUser) {
-      await Future.wait([
-        expenseProvider.loadExpenses(userProvider.user!.uid),
-        budgetProvider.loadBudgets(userProvider.user!.uid),
-      ]);
+      // FIXED: Get current UID and pass to loadUserData
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) {
+        throw Exception('No authenticated user found. Please log in again.');
+      }
+      await userProvider
+          .loadUserData(uid); // FIXED: Pass the required UID argument
+
+      if (userProvider.hasUser) {
+        // FIXED: Ensure all are Futures for Future.wait
+        await Future.wait([
+          expenseProvider.loadExpenses(),
+          budgetProvider.loadBudgets(expenseProvider),
+          loanProvider.loadLoans(),
+        ]);
+        budgetProvider.loadUserBudgets(userProvider.user!);
+      }
+    } catch (e) {
+      setState(() {
+        _loadingError = 'Failed to load dashboard data: $e';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isInitialLoading = false;
+        });
+      }
     }
+  }
+
+  Future<void> _refreshDashboard() async {
+    setState(() {
+      _loadingError = null;
+    });
+    await _preloadDashboardData();
   }
 
   @override
@@ -51,26 +93,115 @@ class _DashboardScreenState extends State<DashboardScreen> {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final user = userProvider.user!;
-        final totalIncome = user.monthlyIncome;
-        final totalExpenses = expenseProvider.monthlyTotal;
-        final totalBudget = budgetProvider.totalAllocated;
-        final remainingBalance = totalIncome - totalExpenses;
+        if (_isInitialLoading) {
+          return Scaffold(
+            body: Container(
+              decoration:
+                  const BoxDecoration(gradient: AppTheme.liquidBackground),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 80.w,
+                      height: 80.w,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Colors.white, Colors.white.withOpacity(0.8)],
+                        ),
+                        shape: BoxShape.circle,
+                      ),
+                      child: CircularProgressIndicator(
+                        valueColor:
+                            AlwaysStoppedAnimation(AppTheme.primaryPurple),
+                        strokeWidth: 3,
+                      ),
+                    )
+                        .animate(onPlay: (controller) => controller.repeat())
+                        .rotate(duration: 2000.ms)
+                        .then()
+                        .shimmer(
+                            duration: 1500.ms,
+                            color: Colors.white.withOpacity(0.3)),
+                    SizedBox(height: 24.h),
+                    Text(
+                      'Loading your dashboard...',
+                      style: TextStyle(
+                        fontSize: 16.sp,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white.withOpacity(0.9),
+                      ),
+                    )
+                        .animate()
+                        .fadeIn(delay: 500.ms)
+                        .slideY(begin: 0.3, end: 0),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        if (_loadingError != null) {
+          return Scaffold(
+            body: Container(
+              decoration:
+                  const BoxDecoration(gradient: AppTheme.liquidBackground),
+              child: Center(
+                child: LiquidCard(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.error_outline,
+                        size: 48.sp,
+                        color: Colors.red,
+                      ),
+                      SizedBox(height: 16.h),
+                      Text(
+                        'Oops! Something went wrong',
+                        style: TextStyle(
+                          fontSize: 18.sp,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade800,
+                        ),
+                      ),
+                      SizedBox(height: 8.h),
+                      Text(
+                        _loadingError!,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 14.sp,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                      SizedBox(height: 20.h),
+                      ElevatedButton(
+                        onPressed: _refreshDashboard,
+                        child: Text('Try Again'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
 
         return Scaffold(
           body: Container(
-            decoration: const BoxDecoration(
-              gradient: AppTheme.liquidBackground,
-            ),
+            decoration:
+                const BoxDecoration(gradient: AppTheme.liquidBackground),
             child: SafeArea(
               child: RefreshIndicator(
-                onRefresh: _loadData,
+                onRefresh: _refreshDashboard,
                 child: SingleChildScrollView(
                   padding: EdgeInsets.all(20.w),
+                  physics: const AlwaysScrollableScrollPhysics(),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Header with greeting
+                      // Welcome Header
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -78,291 +209,113 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                _getGreeting(),
+                                'Welcome back! 👋',
                                 style: TextStyle(
-                                  fontSize: 16.sp,
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.white.withOpacity(0.8),
-                                ),
-                              ),
-                              Text(
-                                user.name,
-                                style: TextStyle(
-                                  fontSize: 24.sp,
+                                  fontSize: 28.sp,
                                   fontWeight: FontWeight.w800,
                                   color: Colors.white,
+                                  shadows: [
+                                    Shadow(
+                                      color: Colors.black.withOpacity(0.2),
+                                      offset: const Offset(0, 2),
+                                      blurRadius: 8,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              SizedBox(height: 4.h),
+                              Text(
+                                userProvider.user!.name.split(' ').first,
+                                style: TextStyle(
+                                  fontSize: 20.sp,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white.withOpacity(0.8),
                                 ),
                               ),
                             ],
                           ),
                           Container(
-                            width: 50.w,
-                            height: 50.w,
+                            padding: EdgeInsets.symmetric(
+                                horizontal: 12.w, vertical: 6.h),
                             decoration: BoxDecoration(
-                              shape: BoxShape.circle,
                               gradient: LinearGradient(
                                 colors: [
-                                  Colors.white.withOpacity(0.3),
+                                  Colors.white.withOpacity(0.2),
                                   Colors.white.withOpacity(0.1),
                                 ],
                               ),
+                              borderRadius: BorderRadius.circular(20.r),
                             ),
-                            child: user.profileImageUrl != null
-                                ? ClipRRect(
-                                    borderRadius: BorderRadius.circular(25.r),
-                                    child: Image.network(
-                                      user.profileImageUrl!,
-                                      fit: BoxFit.cover,
-                                    ),
-                                  )
-                                : Icon(
-                                    Icons.person,
-                                    color: Colors.white,
-                                    size: 24.sp,
-                                  ),
+                            child: Text(
+                              DateFormat('MMM d, yyyy').format(DateTime.now()),
+                              style: TextStyle(
+                                fontSize: 12.sp,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.white,
+                              ),
+                            ),
                           ),
                         ],
                       )
                           .animate()
                           .fadeIn(duration: 800.ms)
                           .slideY(begin: -0.3, end: 0),
-
                       SizedBox(height: 30.h),
 
-                      // Balance Overview Card
-                      LiquidCard(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            Colors.white.withOpacity(0.25),
-                            Colors.white.withOpacity(0.15),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Available Balance',
-                                  style: TextStyle(
-                                    fontSize: 16.sp,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white.withOpacity(0.9),
-                                  ),
-                                ),
-                                Icon(
-                                  Icons.visibility_outlined,
-                                  color: Colors.white.withOpacity(0.8),
-                                  size: 20.sp,
-                                ),
-                              ],
-                            ),
-                            SizedBox(height: 8.h),
-                            Text(
-                              '${user.currency} ${NumberFormat('#,##0.00').format(remainingBalance)}',
-                              style: TextStyle(
-                                fontSize: 32.sp,
-                                fontWeight: FontWeight.w900,
-                                color: Colors.white,
-                              ),
-                            ),
-                            SizedBox(height: 16.h),
-                            Row(
-                              children: [
-                                Icon(
-                                  remainingBalance >= 0
-                                      ? Icons.trending_up_rounded
-                                      : Icons.trending_down_rounded,
-                                  color: remainingBalance >= 0
-                                      ? Colors.greenAccent
-                                      : Colors.redAccent,
-                                  size: 16.sp,
-                                ),
-                                SizedBox(width: 4.w),
-                                Text(
-                                  remainingBalance >= 0
-                                      ? 'You\'re doing great!'
-                                      : 'Consider reducing expenses',
-                                  style: TextStyle(
-                                    fontSize: 14.sp,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.white.withOpacity(0.9),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
+                      // Balance Overview
+                      BalanceOverviewCard(
+                        user: userProvider.user!,
+                        totalExpenses: expenseProvider.monthlyTotal,
+                        budgetProvider: budgetProvider,
                       )
                           .animate()
                           .fadeIn(delay: 200.ms, duration: 1000.ms)
-                          .slideY(begin: 0.3, end: 0)
-                          .then()
-                          .shimmer(
-                            duration: 2000.ms,
-                            color: Colors.white.withOpacity(0.2),
-                          ),
-
+                          .slideY(begin: 0.3, end: 0),
                       SizedBox(height: 24.h),
 
-                      // Quick Stats Row
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildStatCard(
-                              'Income',
-                              '${user.currency} ${NumberFormat('#,##0').format(totalIncome)}',
-                              Icons.trending_up_rounded,
-                              Colors.greenAccent,
-                              0,
-                            ),
-                          ),
-                          SizedBox(width: 12.w),
-                          Expanded(
-                            child: _buildStatCard(
-                              'Expenses',
-                              '${user.currency} ${NumberFormat('#,##0').format(totalExpenses)}',
-                              Icons.trending_down_rounded,
-                              Colors.orangeAccent,
-                              100,
-                            ),
-                          ),
-                          SizedBox(width: 12.w),
-                          Expanded(
-                            child: _buildStatCard(
-                              'Budget',
-                              '${user.currency} ${NumberFormat('#,##0').format(totalBudget)}',
-                              Icons.pie_chart_rounded,
-                              AppTheme.primaryPurple,
-                              200,
-                            ),
-                          ),
-                        ],
+                      LoanOverviewCard(
+                        onViewDetails: () {
+                          // Navigate to budget and scroll to loans if you have a scroll controller
+                          context.go('/budget'); // or your route
+                        },
                       ),
 
+                      // Quick Actions
+                      QuickActionsWidget()
+                          .animate()
+                          .fadeIn(delay: 400.ms, duration: 800.ms)
+                          .slideY(begin: 0.3, end: 0),
                       SizedBox(height: 24.h),
 
-                      // Expense Chart
-                      LiquidCard(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Spending Overview',
-                                  style: TextStyle(
-                                    fontSize: 18.sp,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.grey.shade800,
-                                  ),
-                                ),
-                                Container(
-                                  padding: EdgeInsets.symmetric(
-                                    horizontal: 12.w,
-                                    vertical: 6.h,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    gradient: AppTheme.liquidBackground,
-                                    borderRadius: BorderRadius.circular(20.r),
-                                  ),
-                                  child: Text(
-                                    'This Month',
-                                    style: TextStyle(
-                                      fontSize: 12.sp,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            SizedBox(height: 20.h),
-                            ExpenseChartWidget(
-                                expenses: expenseProvider.expenses),
-                          ],
-                        ),
+                      // Budget Overview with sorted categories
+                      BudgetOverviewCard(
+                        budgetProvider: budgetProvider,
+                        expenseProvider: expenseProvider,
+                        currency: userProvider.user!.currency,
                       )
                           .animate()
                           .fadeIn(delay: 600.ms, duration: 1000.ms)
                           .slideY(begin: 0.3, end: 0),
-
                       SizedBox(height: 24.h),
 
-                      // Category Progress
-                      LiquidCard(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Budget Progress',
-                              style: TextStyle(
-                                fontSize: 18.sp,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.grey.shade800,
-                              ),
-                            ),
-                            SizedBox(height: 20.h),
-                            CategoryProgressWidget(
-                              budgets: budgetProvider.activeBudgets,
-                              expenses: expenseProvider.categoryTotals,
-                              currency: user.currency,
-                            ),
-                          ],
-                        ),
+                      // Spending Insights
+                      SpendingInsightsWidget(
+                        expenseProvider: expenseProvider,
+                        currency: userProvider.user!.currency,
                       )
                           .animate()
                           .fadeIn(delay: 800.ms, duration: 1000.ms)
                           .slideY(begin: 0.3, end: 0),
-
                       SizedBox(height: 24.h),
 
                       // Recent Transactions
-                      LiquidCard(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Recent Transactions',
-                                  style: TextStyle(
-                                    fontSize: 18.sp,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.grey.shade800,
-                                  ),
-                                ),
-                                TextButton(
-                                  onPressed: () => _navigateToExpenses(),
-                                  child: Text(
-                                    'View All',
-                                    style: TextStyle(
-                                      fontSize: 14.sp,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppTheme.primaryPurple,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            SizedBox(height: 16.h),
-                            RecentTransactionsWidget(
-                              expenses:
-                                  expenseProvider.expenses.take(5).toList(),
-                              currency: user.currency,
-                            ),
-                          ],
-                        ),
+                      RecentTransactionsWidget(
+                        expenses: expenseProvider.expenses.take(5).toList(),
+                        currency: userProvider.user!.currency,
                       )
                           .animate()
                           .fadeIn(delay: 1000.ms, duration: 1000.ms)
                           .slideY(begin: 0.3, end: 0),
-
                       SizedBox(height: 100.h), // Space for bottom nav
                     ],
                   ),
@@ -373,63 +326,5 @@ class _DashboardScreenState extends State<DashboardScreen> {
         );
       },
     );
-  }
-
-  String _getGreeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good Morning! 🌅';
-    if (hour < 17) return 'Good Afternoon! ☀️';
-    return 'Good Evening! 🌙';
-  }
-
-  Widget _buildStatCard(
-      String title, String value, IconData icon, Color color, int delay) {
-    return LiquidCard(
-      gradient: AppTheme.cardGradient,
-      padding: EdgeInsets.all(16.w),
-      child: Column(
-        children: [
-          Container(
-            width: 40.w,
-            height: 40.w,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              icon,
-              color: color,
-              size: 20.sp,
-            ),
-          ),
-          SizedBox(height: 8.h),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 16.sp,
-              fontWeight: FontWeight.w700,
-              color: Colors.grey.shade800,
-            ),
-          ),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 12.sp,
-              fontWeight: FontWeight.w500,
-              color: Colors.grey.shade600,
-            ),
-          ),
-        ],
-      ),
-    )
-        .animate()
-        .fadeIn(delay: Duration(milliseconds: 400 + delay), duration: 800.ms)
-        .slideY(begin: 0.3, end: 0)
-        .then()
-        .shimmer(duration: 2000.ms, color: color.withOpacity(0.1));
-  }
-
-  void _navigateToExpenses() {
-    // Navigation will be handled by the bottom nav
   }
 }

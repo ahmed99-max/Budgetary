@@ -29,7 +29,7 @@ class _ExpensesScreenState extends State<ExpensesScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid != null) {
-        Provider.of<ExpenseProvider>(context, listen: false).loadExpenses(uid);
+        Provider.of<ExpenseProvider>(context, listen: false).loadExpenses();
       }
     });
   }
