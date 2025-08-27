@@ -18,10 +18,8 @@ class PaymentService {
   // Your actual Razorpay keys
   static const String _testKeyId = 'rzp_test_RAHe2a2gpOfZSc';
   static const String _testKeySecret = 'cjdQt9bb39HSkUMcFg0pSlVp';
-  static const String _liveKeyId =
-      'rzp_live_YOUR_LIVE_KEY'; // Replace when going live
-  static const String _liveKeySecret =
-      'YOUR_LIVE_KEY_SECRET'; // Replace when going live
+  static const String _liveKeyId = 'rzp_live_YOUR_LIVE_KEY'; // Replace when going live
+  static const String _liveKeySecret = 'YOUR_LIVE_KEY_SECRET'; // Replace when going live
   static const bool _isTestMode = true; // Set to false for production
 
   String get keyId => _isTestMode ? _testKeyId : _liveKeyId;
@@ -29,12 +27,12 @@ class PaymentService {
 
   void initialize() {
     if (_initialized) return;
-
+    
     _razorpay = Razorpay();
     _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
     _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
     _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
-
+    
     _initialized = true;
   }
 
@@ -85,7 +83,9 @@ class PaymentService {
           'email': userEmail ?? '',
           'name': userName ?? '',
         },
-        'theme': {'color': '#4169E1'},
+        'theme': {
+          'color': '#4169E1'
+        },
         'method': {
           'upi': true,
           'card': true,
@@ -114,11 +114,11 @@ class PaymentService {
         'pa=$receiverUPI&'
         'am=${amount.toStringAsFixed(2)}&'
         'tn=${Uri.encodeComponent(transactionNote)}';
-
+    
     if (merchantCode != null) {
       url += '&mc=$merchantCode';
     }
-
+    
     return url;
   }
 
@@ -133,7 +133,7 @@ class PaymentService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final existingPayments = prefs.getStringList('payment_history') ?? [];
-
+      
       final paymentRecord = {
         'id': paymentId,
         'amount': amount,
@@ -142,7 +142,7 @@ class PaymentService {
         'method': method,
         'timestamp': DateTime.now().toIso8601String(),
       };
-
+      
       existingPayments.add(jsonEncode(paymentRecord));
       await prefs.setStringList('payment_history', existingPayments);
     } catch (e) {
@@ -155,7 +155,7 @@ class PaymentService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final paymentStrings = prefs.getStringList('payment_history') ?? [];
-
+      
       return paymentStrings
           .map((str) => jsonDecode(str) as Map<String, dynamic>)
           .toList()
@@ -175,7 +175,7 @@ class PaymentService {
     try {
       final orderUrl = 'https://api.razorpay.com/v1/orders';
       final credentials = base64Encode(utf8.encode('$keyId:$keySecret'));
-
+      
       final response = await http.post(
         Uri.parse(orderUrl),
         headers: {
