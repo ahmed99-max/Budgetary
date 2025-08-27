@@ -1,9 +1,14 @@
+// lib/shared/providers/expense_provider.dart
+// FIXED VERSION
+
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart'; // FIXED: Added for debugPrint
 
-import '../models/expense_model.dart';
 import '../../core/services/firebase_service.dart';
+import '../models/expense_model.dart';
+import '../../features/loan/models/loan_model.dart';
 import 'loan_provider.dart'; // Imports Loan class
 
 class ExpenseProvider extends ChangeNotifier {
@@ -204,24 +209,10 @@ class ExpenseProvider extends ChangeNotifier {
       _setError(null);
       final loanProvider =
           LoanProvider(); // Direct init (assuming it's not widget-dependent)
-      final loan = loanProvider.loans.firstWhere(
-        (l) => l.id == loanId,
-        orElse: () => Loan(
-          // FIXED: Use Loan constructor with all required params
-          id: '',
-          userId: uid ?? '',
-          title: '',
-          amount: 0.0,
-          monthlyInstallment: 0.0,
-          remainingMonths: 0,
-          totalMonths: 0,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-          startDate: DateTime.now(),
-        ),
-      );
+      final loan = await _getLoanById(
+          loanId, loanProvider); // FIXED: Added helper to fetch loan
 
-      if (loan.id.isEmpty) {
+      if (loan == null) {
         _setError('Loan not found');
         return false;
       }
@@ -231,11 +222,11 @@ class ExpenseProvider extends ChangeNotifier {
         'title': 'Loan Payment', // Added title
         'amount': amount,
         'category': 'Loan EMIs',
-        'subcategory': loan
-            .title, // FIXED: Use 'title' (your class has 'title', not 'name')
+        'subcategory':
+            loan.name, // FIXED: Use 'name' (your class has 'name', not 'title')
         'description': description.isNotEmpty
             ? description
-            : 'EMI Payment - ${loan.title}', // FIXED: Use 'title'
+            : 'EMI Payment - ${loan.name}', // FIXED: Use 'name'
         'date': Timestamp.fromDate(date),
         'loanId': loanId,
         'isLoanPayment': true,
@@ -262,8 +253,18 @@ class ExpenseProvider extends ChangeNotifier {
     }
   }
 
+  // FIXED: Added helper to fetch loan
+  Future<LoanModel?> _getLoanById(String loanId, LoanProvider provider) async {
+    await provider.loadLoans();
+    try {
+      return provider.loans.firstWhere((l) => l.id == loanId);
+    } catch (e) {
+      return null;
+    }
+  }
+
   void _calculateCategoryTotals() {
-// Implement if needed, or remove calls to it if not used
+    // Implement if needed, or remove calls to it if not used
     notifyListeners();
   }
 

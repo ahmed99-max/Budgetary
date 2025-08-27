@@ -1,5 +1,5 @@
-// lib/shared/widgets/enhanced_main_layout.dart
-// BATCH 5: REPLACE THE EXISTING main_layout.dart WITH THIS VERSION
+// lib/shared/widgets/main_layout.dart
+// COMPLETE ENHANCED VERSION WITH NAVIGATION STYLES
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,12 +13,12 @@ import 'liquid_bottom_nav.dart';
 
 enum NavigationStyle {
   modern,
-  original,
+  liquid,
 }
 
 class MainLayout extends StatefulWidget {
   final Widget child;
-  final NavigationStyle navigationStyle; // Add this parameter
+  final NavigationStyle navigationStyle;
 
   const MainLayout({
     super.key,
@@ -61,6 +61,17 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
       label: 'Profile',
       route: '/profile',
     ),
+    // Future menu items can be added here:
+    // NavItem(
+    //   icon: Icons.settings,
+    //   label: 'Settings',
+    //   route: '/settings',
+    // ),
+    // NavItem(
+    //   icon: Icons.notifications,
+    //   label: 'Alerts',
+    //   route: '/alerts',
+    // ),
   ];
 
   @override
@@ -140,9 +151,8 @@ class _MainLayoutState extends State<MainLayout> with TickerProviderStateMixin {
           items: _navItems,
           onTap: _onNavTap,
         );
-      case NavigationStyle.original:
+      case NavigationStyle.liquid:
         return LiquidBottomNav(
-          // Your original navigation
           currentIndex: _currentIndex,
           items: _navItems,
           onTap: _onNavTap,

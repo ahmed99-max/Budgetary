@@ -1,12 +1,13 @@
 // lib/features/loan/widgets/loan_list.dart
+// FIXED VERSION
 
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 
 import '../../../shared/providers/loan_provider.dart'; // Import the kept LoanProvider (which defines Loan)
+import '../../budget/widgets/enhanced_loan_card_widget.dart'; // FIXED: Use the enhanced widget instead of LoanCard
 import 'add_loan_dialog.dart';
-import 'loan_card.dart'; // Assuming this exists or use loan_card_widget.dart - update to use Loan
 
 class LoanList extends StatelessWidget {
   const LoanList({super.key});
@@ -35,11 +36,11 @@ class LoanList extends StatelessWidget {
             TextButton.icon(
               onPressed: () => showDialog(
                 context: context,
-                builder: (_) => const AddLoanDialog(),
+                builder: (_) => const AddLoanDialog(), // FIXED: Added const
               ),
               style: TextButton.styleFrom(
-                backgroundColor: Color.fromRGBO(
-                    255, 255, 255, 0.12), // FIXED: Deprecated withOpacity
+                backgroundColor: const Color.fromRGBO(
+                    255, 255, 255, 0.12), // FIXED: Added const
                 foregroundColor: Colors.white,
                 padding: EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),
                 shape: RoundedRectangleBorder(
@@ -53,7 +54,7 @@ class LoanList extends StatelessWidget {
         ),
         SizedBox(height: 8.h),
         if (provider.isLoading && loans.isEmpty)
-          const Center(child: CircularProgressIndicator())
+          const Center(child: CircularProgressIndicator()) // FIXED: Added const
         else if (loans.isEmpty)
           Text(
             'No loans yet. Add one to get started.',
@@ -64,46 +65,14 @@ class LoanList extends StatelessWidget {
             children: loans
                 .map((l) => Padding(
                       padding: EdgeInsets.only(bottom: 12.h),
-                      child: LoanCard(
-                        loan:
-                            l, // FIXED: l is now Loan, ensure LoanCard accepts Loan
-                        onEdit: () {
-                          showDialog(
-                            context: context,
-                            builder: (_) => AddLoanDialog(
-                                existing:
-                                    l), // FIXED: existing now accepts Loan
-                          );
-                        },
-                        onDelete: () async {
-                          final ok = await showDialog(
-                                context: context,
-                                builder: (_) => AlertDialog(
-                                  title: const Text('Delete loan?'),
-                                  content: Text('This cannot be undone.'),
-                                  actions: [
-                                    TextButton(
-                                      onPressed: () =>
-                                          Navigator.pop(context, false),
-                                      child: const Text('Cancel'),
-                                    ),
-                                    TextButton(
-                                      onPressed: () =>
-                                          Navigator.pop(context, true),
-                                      child: const Text('Delete'),
-                                    ),
-                                  ],
-                                ),
-                              ) ??
-                              false;
-                          if (ok) {
-                            if (context.mounted) {
-                              // FIXED: Async context
-                              await context
-                                  .read<LoanProvider>()
-                                  .deleteLoan(l.id);
-                            }
-                          }
+                      child: EnhancedLoanCardWidget(
+                        // FIXED: Use EnhancedLoanCardWidget instead of LoanCard
+                        loan: l,
+                        currency:
+                            'USD', // FIXED: Added required currency (replace with actual currency if dynamic)
+                        onUpdated: () {
+                          // FIXED: Removed onEdit/onDelete (not needed in enhanced widget; handle updates via onUpdated)
+                          provider.loadLoans(); // Reload loans after update
                         },
                       ),
                     ))

@@ -1,5 +1,7 @@
 // lib/features/budget/screens/budget_screen.dart
+// MINOR UPDATES - Better error handling and loading states
 
+import 'package:budgetary/features/budget/widgets/minimal_loan_card.dart';
 import 'package:budgetary/features/loan/widgets/add_loan_dialog.dart';
 import 'package:budgetary/shared/models/budget_model.dart';
 import 'package:budgetary/shared/providers/loan_provider.dart';
@@ -60,28 +62,46 @@ class _BudgetScreenState extends State<BudgetScreen> {
 
   Future<void> _loadData() async {
     print("🎯 BUDGET SCREEN: Starting _loadData()");
-    final userProvider = Provider.of<UserProvider>(context, listen: false);
-    final expenseProvider =
-        Provider.of<ExpenseProvider>(context, listen: false);
-    final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
-    final loanProvider = Provider.of<LoanProvider>(context, listen: false);
+    try {
+      final userProvider = Provider.of<UserProvider>(context, listen: false);
+      final expenseProvider =
+          Provider.of<ExpenseProvider>(context, listen: false);
+      final budgetProvider =
+          Provider.of<BudgetProvider>(context, listen: false);
+      final loanProvider = Provider.of<LoanProvider>(context, listen: false);
 
-    print("👤 User exists: ${userProvider.hasUser}");
-    if (userProvider.hasUser) {
-      print("👤 User ID: ${userProvider.user!.uid}");
-      print("📧 User email: ${userProvider.user!.email}");
-    }
+      print("👤 User exists: ${userProvider.hasUser}");
+      if (userProvider.hasUser) {
+        print("👤 User ID: ${userProvider.user!.uid}");
+        print("📧 User email: ${userProvider.user!.email}");
+      }
 
-    if (userProvider.hasUser) {
-      await Future.wait([
-        expenseProvider.loadExpenses(),
-        budgetProvider.loadBudgets(expenseProvider),
-        loanProvider.loadLoans(), // 👈 LOAD LOANS
-      ]);
-      budgetProvider.loadUserBudgets(userProvider.user!);
-      print("✅ BUDGET SCREEN: Load completed");
-    } else {
-      print("❌ BUDGET SCREEN: No user found");
+      if (userProvider.hasUser) {
+        // Load all data concurrently
+        await Future.wait([
+          expenseProvider.loadExpenses(),
+          budgetProvider.loadBudgets(expenseProvider),
+          loanProvider.loadLoans(), // This now uses LoanModel consistently
+        ]);
+
+        // Load user budgets after other data is loaded
+        budgetProvider.loadUserBudgets(userProvider.user!);
+        print("✅ BUDGET SCREEN: Load completed successfully");
+      } else {
+        print("❌ BUDGET SCREEN: No user found");
+      }
+    } catch (e, stackTrace) {
+      print("❌ BUDGET SCREEN ERROR: $e");
+      print("📍 STACK TRACE: $stackTrace");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading data: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
@@ -95,39 +115,43 @@ class _BudgetScreenState extends State<BudgetScreen> {
   }
 
   Future<void> _deleteBudget(String budgetId) async {
-    final budgetProvider = Provider.of<BudgetProvider>(context, listen: false);
-    budgetProvider.deleteBudget(budgetId);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Delete Budget'),
-        content: Text('Are you sure you want to delete this budget category?'),
+        title: const Text('Delete Budget'),
+        content:
+            const Text('Are you sure you want to delete this budget category?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: Text('Cancel'),
+            child: const Text('Cancel'),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text('Delete', style: TextStyle(color: Colors.red)),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
 
-    if (confirmed == true) {
+    if (confirmed == true && mounted) {
+      final budgetProvider =
+          Provider.of<BudgetProvider>(context, listen: false);
       final success = await budgetProvider.deleteBudget(budgetId);
-      if (success && mounted) {
+
+      if (!mounted) return;
+
+      if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Budget category deleted successfully'),
+            content: const Text('Budget category deleted successfully'),
             backgroundColor: Colors.green,
             behavior: SnackBarBehavior.floating,
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
         );
-      } else if (mounted) {
+      } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content:
@@ -146,7 +170,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
     // TODO: Implement edit functionality
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Edit feature coming soon!'),
+        content: const Text('Edit feature coming soon!'),
         backgroundColor: AppTheme.primaryPurple,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -221,8 +245,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 colors: [
-                                  Color.fromRGBO(255, 255, 255, 0.2),
-                                  Color.fromRGBO(255, 255, 255, 0.1),
+                                  const Color.fromRGBO(255, 255, 255, 0.2),
+                                  const Color.fromRGBO(255, 255, 255, 0.1),
                                 ],
                               ),
                               borderRadius: BorderRadius.circular(20.r),
@@ -254,15 +278,14 @@ class _BudgetScreenState extends State<BudgetScreen> {
                           .slideY(begin: 0.3, end: 0),
                       SizedBox(height: 24.h),
 
-                      // Loans Section - NEW!
-                      _buildLoansSection(
-                          loans, user.currency, loanProvider.isLoading),
+                      // Loans Section - Enhanced with better error handling
+                      _buildLoansSection(loans, user.currency, loanProvider),
                       SizedBox(height: 24.h),
 
                       // Add Budget Button
                       LiquidButton(
                         text: 'Add Budget Category',
-                        gradient: LinearGradient(
+                        gradient: const LinearGradient(
                           colors: [
                             AppTheme.primaryPurple,
                             AppTheme.primaryBlue,
@@ -277,20 +300,20 @@ class _BudgetScreenState extends State<BudgetScreen> {
                       SizedBox(height: 24.h),
 
                       // Budget Categories
-                      isLoading
-                          ? Center(
-                              child: Padding(
-                                padding: EdgeInsets.all(40.h),
-                                child: CircularProgressIndicator(
-                                  valueColor:
-                                      AlwaysStoppedAnimation(Colors.white),
-                                ),
-                              ),
-                            )
-                          : (budgets.isEmpty
-                              ? _buildEmptyState()
-                              : _buildBudgetsList(
-                                  budgets, expenseProvider, user.currency)),
+                      if (isLoading)
+                        Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(40.h),
+                            child: const CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation(Colors.white),
+                            ),
+                          ),
+                        )
+                      else if (budgets.isEmpty)
+                        _buildEmptyState()
+                      else
+                        _buildBudgetsList(
+                            budgets, expenseProvider, user.currency),
 
                       SizedBox(height: 100.h), // Space for bottom nav
                     ],
@@ -304,8 +327,8 @@ class _BudgetScreenState extends State<BudgetScreen> {
     );
   }
 
-  // In your budget_screen.dart, update the _buildLoansSection method:
-  Widget _buildLoansSection(List loans, String currency, bool isLoading) {
+  Widget _buildLoansSection(
+      List loans, String currency, LoanProvider loanProvider) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -349,7 +372,42 @@ class _BudgetScreenState extends State<BudgetScreen> {
           ],
         ),
         SizedBox(height: 16.h),
-        if (isLoading)
+
+        // Enhanced error handling for loans
+        if (loanProvider.errorMessage != null)
+          Container(
+            padding: EdgeInsets.all(16.w),
+            margin: EdgeInsets.only(bottom: 16.h),
+            decoration: BoxDecoration(
+              color: Colors.red.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12.r),
+              border: Border.all(color: Colors.red.withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.error_outline, color: Colors.red, size: 20.sp),
+                SizedBox(width: 8.w),
+                Expanded(
+                  child: Text(
+                    'Error loading loans: ${loanProvider.errorMessage}',
+                    style: TextStyle(
+                      color: Colors.red.shade700,
+                      fontSize: 12.sp,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _loadData,
+                  child:
+                      const Text('Retry', style: TextStyle(color: Colors.red)),
+                ),
+              ],
+            ),
+          ),
+
+        // Inside _buildLoansSection (replace the else if (loans.isEmpty) ... else Column(...) part with this)
+
+        if (loanProvider.isLoading)
           Center(
             child: Padding(
               padding: EdgeInsets.all(40.h),
@@ -361,17 +419,44 @@ class _BudgetScreenState extends State<BudgetScreen> {
         else if (loans.isEmpty)
           _buildNoLoansCard()
         else
+          // Inside the Column for loans (in _buildLoansSection's else block):
           Column(
             children: loans.asMap().entries.map((entry) {
               final index = entry.key;
               final loan = entry.value;
               return Container(
                 margin: EdgeInsets.only(bottom: 12.h),
-                child: EnhancedLoanCardWidget(
-                  // CHANGED: Use EnhancedLoanCardWidget
+                child: MinimalLoanCard(
                   loan: loan,
                   currency: currency,
-                  onUpdated: _loadData,
+                  onViewDetails: () {
+                    // UPDATED DIALOG: Fits content size
+                    showDialog(
+                      context: context,
+                      builder: (ctx) => Dialog(
+                        backgroundColor: Colors.transparent,
+                        insetPadding: EdgeInsets.symmetric(
+                            horizontal: 40.w,
+                            vertical: 100.h), // Adds margin around dialog
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: 320
+                                .w, // Max width to fit content (adjust as needed)
+                            maxHeight: 400
+                                .h, // Max height to fit content (adjust as needed)
+                          ),
+                          child: IntrinsicHeight(
+                            // Makes height wrap content
+                            child: EnhancedLoanCardWidget(
+                              loan: loan,
+                              currency: currency,
+                              onUpdated: _loadData,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               )
                   .animate()
@@ -386,7 +471,6 @@ class _BudgetScreenState extends State<BudgetScreen> {
         .slideY(begin: 0.3, end: 0);
   }
 
-  // In budget_screen.dart
   Widget _buildNoLoansCard() {
     return LiquidCard(
       child: Container(
@@ -411,7 +495,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
               ),
               SizedBox(height: 4.h),
               Text(
-                'Add loans from your profile to track here',
+                'Add loans to track them here',
                 style: TextStyle(
                   fontSize: 12.sp,
                   color: Colors.grey.shade500,
@@ -419,15 +503,16 @@ class _BudgetScreenState extends State<BudgetScreen> {
               ),
               SizedBox(height: 8.h),
               ElevatedButton.icon(
-                // ADDED: Add Loan button
                 onPressed: () {
                   showDialog(
                     context: context,
-                    builder: (ctx) => AddLoanDialog(),
-                  ).then((_) => _loadData()); // Reload after add
+                    builder: (ctx) => AddLoanDialog(
+                      onLoanUpdated: _loadData,
+                    ),
+                  );
                 },
-                icon: Icon(Icons.add),
-                label: Text('Add Loan'),
+                icon: const Icon(Icons.add),
+                label: const Text('Add Loan'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primaryPurple,
                   foregroundColor: Colors.white,
@@ -462,7 +547,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                 expenseProvider.categoryTotals[budget.category] ?? 0.0;
             return Container(
               margin: EdgeInsets.only(bottom: 16.h),
-              child: budget.isLoanCategory ?? false
+              child: budget.isLoanCategory
                   ? LoanBudgetCategoryItem(
                       budget: budget,
                       spent: spent,
@@ -475,8 +560,7 @@ class _BudgetScreenState extends State<BudgetScreen> {
                       currency: currency,
                       onDelete: () => _deleteBudget(budget.id),
                       onEdit: () => _editBudget(budget.id),
-                      onAddExpense: () =>
-                          _showAddCategoryExpenseDialog(budget), // Add this
+                      onAddExpense: () => _showAddCategoryExpenseDialog(budget),
                     ),
             )
                 .animate()

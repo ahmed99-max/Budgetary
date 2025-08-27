@@ -1,10 +1,11 @@
 // lib/shared/providers/user_provider.dart
+// FIXED VERSION
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
+import 'package:flutter/foundation.dart'; // FIXED: Added for debugPrint
 
 import '../models/user_model.dart';
 import '../../core/services/firebase_service.dart';
@@ -27,7 +28,7 @@ class UserProvider extends ChangeNotifier {
   String get country => _user?.country ?? '';
   String get city => _user?.city ?? '';
   String? get profileImageUrl => _user?.profileImageUrl;
-  Map<String, double> get budgetCategories => _user?.budgetCategories ?? {};
+  Map<String, dynamic> get budgetCategories => _user?.budgetCategories ?? {};
 
   void _setLoading(bool loading) {
     _isLoading = loading;
@@ -43,19 +44,20 @@ class UserProvider extends ChangeNotifier {
     try {
       _setLoading(true);
       _setError(null);
+      debugPrint(
+          '🔄 LOADING USER DATA FOR UID: $uid'); // FIXED: avoid_print -> debugPrint
 
-      print('🔄 LOADING USER DATA FOR UID: $uid');
       final doc = await FirebaseService.getUserDocument(uid).get();
-
       if (doc.exists) {
-        // FIXED: Safely cast Object? to Map<String, dynamic>
+        // FIXED: Safely cast Object? to Map
         final data = doc.data();
         if (data != null && data is Map<String, dynamic>) {
           // FIXED: Convert Timestamps to DateTime for Hive compatibility
           final fixedData = _convertTimestamps(data);
           _user = UserModel.fromFirestore(doc);
           await HiveService.saveUserData('current_user', fixedData);
-          print('✅ USER DATA LOADED: ${_user!.name} (${_user!.email})');
+          debugPrint(
+              '✅ USER DATA LOADED: ${_user!.name} (${_user!.email})'); // FIXED: avoid_print -> debugPrint
         } else {
           throw Exception(
               'Invalid data format from Firestore: expected Map<String, dynamic>');
@@ -70,17 +72,20 @@ class UserProvider extends ChangeNotifier {
             final fixedRetryData = _convertTimestamps(retryData);
             _user = UserModel.fromFirestore(retryDoc);
             await HiveService.saveUserData('current_user', fixedRetryData);
-            print('✅ USER DATA LOADED ON RETRY: ${_user!.name}');
+            debugPrint(
+                '✅ USER DATA LOADED ON RETRY: ${_user!.name}'); // FIXED: avoid_print -> debugPrint
           } else {
             throw Exception('Invalid retry data format from Firestore');
           }
         } else {
           _setError('User data not found');
-          print('❌ USER DATA NOT FOUND FOR UID: $uid');
+          debugPrint(
+              '❌ USER DATA NOT FOUND FOR UID: $uid'); // FIXED: avoid_print -> debugPrint
         }
       }
     } catch (e) {
-      print('❌ ERROR LOADING USER DATA: $e');
+      debugPrint(
+          '❌ ERROR LOADING USER DATA: $e'); // FIXED: avoid_print -> debugPrint
       _setError('Failed to load user data: $e');
     } finally {
       _setLoading(false);
@@ -110,11 +115,9 @@ class UserProvider extends ChangeNotifier {
     List<dynamic>? investments,
   }) async {
     if (_user == null) return false;
-
     try {
       _setLoading(true);
       _setError(null);
-
       final updatedUser = _user!.copyWith(
         name: name,
         phoneNumber: phoneNumber,
@@ -127,20 +130,19 @@ class UserProvider extends ChangeNotifier {
         investments: investments,
         updatedAt: DateTime.now(),
       );
-
       await FirebaseService.setUserDocument(
         _user!.uid,
         updatedUser.toFirestore(),
       );
-
       _user = updatedUser;
       await HiveService.saveUserData('current_user', updatedUser.toFirestore());
-
-      print('✅ USER PROFILE UPDATED: ${updatedUser.name}');
+      debugPrint(
+          '✅ USER PROFILE UPDATED: ${updatedUser.name}'); // FIXED: avoid_print -> debugPrint
       return true;
     } catch (e, st) {
-      print('❌ ERROR IN updateProfile: $e');
-      print('Stack trace: $st');
+      debugPrint(
+          '❌ ERROR IN updateProfile: $e'); // FIXED: avoid_print -> debugPrint
+      debugPrint('Stack trace: $st'); // FIXED: avoid_print -> debugPrint
       _setError('Failed to update profile');
       return false;
     } finally {
@@ -154,72 +156,71 @@ class UserProvider extends ChangeNotifier {
     required String city,
     required String currency,
     required double monthlyIncome,
-    required Map<String, double> budgetCategories,
+    required Map<String, dynamic> budgetCategories,
     required List<dynamic> emiLoans,
     required List<dynamic> investments,
     LoanProvider? loanProvider, // 👈 NEW: Accept loan provider
   }) async {
     if (_user == null) return false;
-
     try {
       _setLoading(true);
       _setError(null);
-
       final updatedUser = _user!.copyWith(
         phoneNumber: phoneNumber,
         country: country,
         city: city,
         currency: currency,
         monthlyIncome: monthlyIncome,
-        budgetCategories: Map<String, double>.from(budgetCategories),
+        budgetCategories: Map.from(budgetCategories),
         emiLoans: emiLoans,
         investments: investments,
         hasCompletedProfileSetup: true,
         updatedAt: DateTime.now(),
       );
-
-      print('DEBUG: Updating user doc with data:');
-      print(updatedUser.toFirestore());
-
+      debugPrint(
+          'DEBUG: Updating user doc with data:'); // FIXED: avoid_print -> debugPrint
+      debugPrint(updatedUser
+          .toFirestore()
+          .toString()); // FIXED: avoid_print -> debugPrint
       await FirebaseService.setUserDocument(
         _user!.uid,
         updatedUser.toFirestore(),
       );
-
       _user = updatedUser;
-
       // 👈 NEW: Create loans in LoanProvider if provided
       if (loanProvider != null && emiLoans.isNotEmpty) {
-        print('🏦 CREATING ${emiLoans.length} LOANS FROM PROFILE SETUP');
+        debugPrint(
+            '🏦 CREATING ${emiLoans.length} LOANS FROM PROFILE SETUP'); // FIXED: avoid_print -> debugPrint
         for (var loanData in emiLoans) {
           if (loanData is Map<String, dynamic>) {
             final title = loanData['name'] ?? 'Loan';
             final amount = (loanData['amount'] ?? 0.0) as double;
             final monthlyInstallment = (loanData['monthlyPayment'] ?? 0.0)
                 as double; // FIXED: Match LoanEMI field (monthlyPayment)
-            final remainingMonths = (loanData['remainingMonths'] ?? 0)
-                as int; // FIXED: Match LoanEMI field
-
-            if (amount > 0 && monthlyInstallment > 0 && remainingMonths > 0) {
+            final totalMonths = (loanData['totalMonths'] ?? 0)
+                as int; // FIXED: Use totalMonths instead of remainingMonths
+            if (amount > 0 && monthlyInstallment > 0 && totalMonths > 0) {
               final success = await loanProvider.addLoan(
                 title: title,
                 amount: amount,
                 monthlyInstallment: monthlyInstallment,
-                remainingMonths: remainingMonths,
+                totalMonths: totalMonths, // FIXED: Use totalMonths
+                startDate: DateTime.now(),
               );
-              print(success
+              debugPrint(success
                   ? '✅ CREATED LOAN: $title'
-                  : '❌ FAILED TO CREATE LOAN: $title');
+                  : '❌ FAILED TO CREATE LOAN: $title'); // FIXED: avoid_print -> debugPrint
             }
           }
         }
       }
-
-      print('✅ PROFILE SETUP COMPLETED FOR: ${updatedUser.name}');
+      debugPrint(
+          '✅ PROFILE SETUP COMPLETED FOR: ${updatedUser.name}'); // FIXED: avoid_print -> debugPrint
       return true;
     } catch (e, st) {
-      print('❌ ERROR IN completeProfileSetup: $e');
-      print('Stack trace: $st');
+      debugPrint(
+          '❌ ERROR IN completeProfileSetup: $e'); // FIXED: avoid_print -> debugPrint
+      debugPrint('Stack trace: $st'); // FIXED: avoid_print -> debugPrint
       _setError('Failed to complete profile setup');
       return false;
     } finally {
@@ -229,34 +230,30 @@ class UserProvider extends ChangeNotifier {
 
   Future<bool> uploadProfileImage(XFile imageFile) async {
     if (_user == null) return false;
-
     try {
       _setLoading(true);
       _setError(null);
-
       final file = File(imageFile.path);
       final ref = FirebaseService.getUserStorageRef(_user!.uid)
           .child('profile_image.jpg');
-
       await ref.putFile(file);
       final downloadUrl = await ref.getDownloadURL();
-
       final updatedUser = _user!.copyWith(
         profileImageUrl: downloadUrl,
         updatedAt: DateTime.now(),
       );
-
       await FirebaseService.setUserDocument(
         _user!.uid,
         updatedUser.toFirestore(),
       );
-
       _user = updatedUser;
-      print('✅ PROFILE IMAGE UPLOADED');
+      debugPrint(
+          '✅ PROFILE IMAGE UPLOADED'); // FIXED: avoid_print -> debugPrint
       return true;
     } catch (e, st) {
-      print('❌ ERROR IN uploadProfileImage: $e');
-      print('Stack trace: $st');
+      debugPrint(
+          '❌ ERROR IN uploadProfileImage: $e'); // FIXED: avoid_print -> debugPrint
+      debugPrint('Stack trace: $st'); // FIXED: avoid_print -> debugPrint
       _setError('Failed to upload profile image');
       return false;
     } finally {

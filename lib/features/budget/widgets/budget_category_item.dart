@@ -1,10 +1,11 @@
 // lib/features/budget/widgets/enhanced_budget_category_item.dart
-// BATCH 4: REPLACE THE EXISTING budget_category_item.dart WITH THIS VERSION
+// UPDATED VERSION: Shows Spent, Used %, Budget, and Remaining
 
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
+
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/models/budget_model.dart';
 import '../../../shared/widgets/liquid_card.dart';
@@ -167,7 +168,7 @@ class BudgetCategoryItem extends StatelessWidget {
           ),
           SizedBox(height: 16.h),
 
-          // Stats Row with enhanced layout
+          // NEW: Stats Row for Spent, Used %, Budget
           Container(
             padding: EdgeInsets.all(12.w),
             decoration: BoxDecoration(
@@ -181,41 +182,23 @@ class BudgetCategoryItem extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: _buildStatItem(
-                    'Spent',
-                    '$currency ${NumberFormat('#,##0').format(spent)}',
-                    Icons.trending_up,
-                    progressColor,
-                  ),
+                _buildStatItem(
+                  'Spent',
+                  '$currency ${NumberFormat('#,##0').format(spent)}',
+                  Icons.trending_up,
+                  progressColor,
                 ),
-                Container(
-                  width: 1,
-                  height: 40.h,
-                  color: Colors.grey.shade300,
+                _buildStatItem(
+                  'Used',
+                  '${percentage.toStringAsFixed(1)}%',
+                  Icons.pie_chart,
+                  progressColor,
                 ),
-                Expanded(
-                  child: _buildStatItem(
-                    '${percentage.toStringAsFixed(1)}%',
-                    'Used',
-                    Icons.pie_chart,
-                    progressColor,
-                    isCenter: true,
-                  ),
-                ),
-                Container(
-                  width: 1,
-                  height: 40.h,
-                  color: Colors.grey.shade300,
-                ),
-                Expanded(
-                  child: _buildStatItem(
-                    'Budget',
-                    '$currency ${NumberFormat('#,##0').format(budget.allocatedAmount)}',
-                    Icons.account_balance_wallet,
-                    Colors.grey.shade700,
-                    isRight: true,
-                  ),
+                _buildStatItem(
+                  'Budget',
+                  '$currency ${NumberFormat('#,##0').format(budget.allocatedAmount)}',
+                  Icons.account_balance_wallet,
+                  Colors.grey.shade700,
                 ),
               ],
             ),
@@ -314,16 +297,10 @@ class BudgetCategoryItem extends StatelessWidget {
     String label,
     String value,
     IconData icon,
-    Color color, {
-    bool isCenter = false,
-    bool isRight = false,
-  }) {
+    Color color,
+  ) {
     return Column(
-      crossAxisAlignment: isCenter
-          ? CrossAxisAlignment.center
-          : isRight
-              ? CrossAxisAlignment.end
-              : CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisSize: MainAxisSize.min,
@@ -331,7 +308,7 @@ class BudgetCategoryItem extends StatelessWidget {
             Icon(icon, size: 14.sp, color: color),
             SizedBox(width: 4.w),
             Text(
-              isCenter ? label : (isRight ? 'Budget' : 'Spent'),
+              label,
               style: TextStyle(
                 fontSize: 10.sp,
                 color: Colors.grey.shade600,
@@ -342,23 +319,14 @@ class BudgetCategoryItem extends StatelessWidget {
         ),
         SizedBox(height: 4.h),
         Text(
-          isCenter ? value : label,
+          value,
           style: TextStyle(
-            fontSize: isCenter ? 16.sp : 13.sp,
+            fontSize: 13.sp,
             fontWeight: FontWeight.w700,
             color: color,
           ),
           overflow: TextOverflow.ellipsis,
         ),
-        if (isCenter)
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 10.sp,
-              color: Colors.grey.shade600,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
       ],
     );
   }

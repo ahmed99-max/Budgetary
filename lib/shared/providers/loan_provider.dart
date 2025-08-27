@@ -1,129 +1,30 @@
 // lib/shared/providers/loan_provider.dart
-// Modified existing code: Changed loadLoans to fetch from 'emiLoans' array field in user document (matches your DB).
-// Added 'startDate' to Loan class (from DB).
-// Mapped DB 'name' to Loan 'title', 'monthlyPayment' to 'monthlyInstallment', etc.
-// Computed 'remainingMonths' based on startDate and current date (DB doesn't have it).
-// For add/update/delete/makePayment: Update the array field in the user doc using transactions for safety.
-// Removed prints for production; added error handling.
+// COMPLETE FIXED VERSION
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-
-class Loan {
-  final String id;
-  final String userId;
-  final String title;
-  final double amount;
-  final double monthlyInstallment;
-  final int remainingMonths;
-  final int totalMonths; // Track original loan term
-  final DateTime startDate; // ADDED: To match your DB and compute remaining
-  final DateTime createdAt;
-  final DateTime? updatedAt; // Track updates
-
-  Loan({
-    required this.id,
-    required this.userId,
-    required this.title,
-    required this.amount,
-    required this.monthlyInstallment,
-    required this.remainingMonths,
-    required this.totalMonths,
-    required this.startDate,
-    required this.createdAt,
-    this.updatedAt,
-  });
-
-  // Calculated properties
-  double get totalRemaining => monthlyInstallment * remainingMonths;
-  double get totalPaid => amount - totalRemaining;
-  double get completionPercentage => totalMonths > 0
-      ? ((totalMonths - remainingMonths) / totalMonths) * 100
-      : 0;
-  bool get isCompleted => remainingMonths <= 0;
-
-  Map<String, dynamic> toFirestore() => {
-        'id': id,
-        'name': title, // Map back to DB 'name'
-        'totalAmount': amount,
-        'monthlyPayment': monthlyInstallment, // Map to DB 'monthlyPayment'
-        'totalMonths': totalMonths,
-        'startDate': startDate.toIso8601String(),
-      };
-
-  factory Loan.fromMap(Map<String, dynamic> data, String id, String userId) {
-    final now = DateTime.now();
-    final startDate = DateTime.tryParse(data['startDate'] ?? '') ?? now;
-
-    // Compute monthsElapsed
-    num monthsElapsed =
-        (now.year - startDate.year) * 12 + (now.month - startDate.month);
-    if (now.day < startDate.day) monthsElapsed -= 1;
-    monthsElapsed = monthsElapsed.clamp(0, data['totalMonths'] ?? 0);
-
-    // Compute remainingMonths
-    final totalMonths = (data['totalMonths'] as num?)?.toInt() ?? 0;
-    int remainingMonths = totalMonths - monthsElapsed.toInt();
-    remainingMonths = remainingMonths.clamp(0, totalMonths);
-
-    return Loan(
-      id: id,
-      userId: userId,
-      title: data['name'] ?? '',
-      amount: (data['totalAmount'] as num?)?.toDouble() ?? 0.0,
-      monthlyInstallment: (data['monthlyPayment'] as num?)?.toDouble() ?? 0.0,
-      remainingMonths: remainingMonths,
-      totalMonths: totalMonths,
-      startDate: startDate,
-      createdAt: now, // Set if not in data; adjust if available
-      updatedAt: now, // Set if not in data; adjust if available
-    );
-  }
-
-  Loan copyWith({
-    String? title,
-    double? amount,
-    double? monthlyInstallment,
-    int? remainingMonths,
-    int? totalMonths,
-    DateTime? startDate,
-    DateTime? updatedAt,
-  }) {
-    return Loan(
-      id: id,
-      userId: userId,
-      title: title ?? this.title,
-      amount: amount ?? this.amount,
-      monthlyInstallment: monthlyInstallment ?? this.monthlyInstallment,
-      remainingMonths: remainingMonths ?? this.remainingMonths,
-      totalMonths: totalMonths ?? this.totalMonths,
-      startDate: startDate ?? this.startDate,
-      createdAt: createdAt,
-      updatedAt: updatedAt ?? DateTime.now(),
-    );
-  }
-}
+import '../../../features/loan/models/loan_model.dart';
 
 class LoanProvider extends ChangeNotifier {
-  List<Loan> _loans = [];
+  List<LoanModel> _loans = [];
   bool _isLoading = false;
   String? _errorMessage;
 
-  List<Loan> get loans => _loans;
+  List<LoanModel> get loans => _loans;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
   double get totalLoanAmount =>
-      _loans.fold(0, (sum, loan) => sum + loan.amount);
+      _loans.fold(0, (sum, loan) => sum + loan.totalAmount);
 
-  double get totalRemaining => _loans.fold(
-      0, (sum, loan) => sum + (loan.monthlyInstallment * loan.remainingMonths));
+  double get totalRemaining =>
+      _loans.fold(0, (sum, loan) => sum + loan.remainingAmount);
 
   double get totalMonthlyInstallments =>
-      _loans.fold(0, (sum, loan) => sum + loan.monthlyInstallment);
+      _loans.fold(0, (sum, loan) => sum + loan.emiAmount);
 
-  List<Loan> get activeLoans =>
+  List<LoanModel> get activeLoans =>
       _loans.where((loan) => !loan.isCompleted).toList();
 
   Future<void> loadLoans() async {
@@ -137,72 +38,50 @@ class LoanProvider extends ChangeNotifier {
       _setLoading(true);
       _setError(null);
 
-      // Fetch the user document
+      print("🎯 LOAN PROVIDER: Loading loans for user: $uid");
+
       final userDoc =
           await FirebaseFirestore.instance.collection('users').doc(uid).get();
 
       if (!userDoc.exists) {
+        print("❌ LOAN PROVIDER: User document not found");
         _setError('User document not found');
         return;
       }
 
-      // Get the emiLoans array from the user document
-      final emiLoansArray = userDoc.data()?['emiLoans'] as List<dynamic>? ?? [];
+      final userData = userDoc.data() as Map<String, dynamic>?;
+      final emiLoansArray = userData?['emiLoans'] as List<dynamic>? ?? [];
 
-      // Map each item in the array to a Loan object
+      print(
+          "📊 LOAN PROVIDER: Found ${emiLoansArray.length} loans in database");
+
       _loans = emiLoansArray.asMap().entries.map((entry) {
         final index = entry.key;
         final data = entry.value as Map<String, dynamic>;
-        return Loan.fromMap(data, data['id'] ?? 'array_$index',
-            uid); // Use DB 'id' or index-based
+
+        print(
+            "🔄 LOAN PROVIDER: Processing loan ${index + 1}: ${data['name']}");
+
+        return LoanModel(
+          id: data['id']?.toString() ?? 'loan_$index',
+          userId: uid,
+          name: data['name']?.toString() ?? 'Unnamed Loan',
+          totalAmount: _parseDouble(data['totalAmount']),
+          emiAmount: _parseDouble(data['monthlyPayment']),
+          startDate: _parseDate(data['startDate']),
+          tenureMonths: _parseInt(data['totalMonths']),
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
       }).toList();
 
+      print("✅ LOAN PROVIDER: Successfully loaded ${_loans.length} loans");
+
       notifyListeners();
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print("❌ LOAN PROVIDER ERROR: $e");
+      print("📍 STACK TRACE: $stackTrace");
       _setError('Failed to load loans: $e');
-    } finally {
-      _setLoading(false);
-    }
-  }
-
-  Future<bool> addLoanWithStartDate({
-    required String title,
-    required double amount,
-    required double monthlyInstallment,
-    required int totalMonths,
-    required DateTime startDate,
-  }) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) {
-      _setError('No authenticated user');
-      return false;
-    }
-
-    try {
-      _setLoading(true);
-      _setError(null);
-      final now = DateTime.now();
-
-      final loanData = {
-        'id': DateTime.now().millisecondsSinceEpoch.toString(), // Generate ID
-        'name': title,
-        'totalAmount': amount,
-        'monthlyPayment': monthlyInstallment,
-        'totalMonths': totalMonths,
-        'startDate': startDate.toIso8601String(),
-      };
-
-      // Append to emiLoans array in user doc
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
-        'emiLoans': FieldValue.arrayUnion([loanData]),
-      });
-
-      // Reload loans to reflect changes
-      await loadLoans();
-      return true;
-    } catch (e) {
-      _setError('Failed to add loan: $e');
-      return false;
     } finally {
       _setLoading(false);
     }
@@ -212,7 +91,8 @@ class LoanProvider extends ChangeNotifier {
     required String title,
     required double amount,
     required double monthlyInstallment,
-    required int remainingMonths,
+    required int totalMonths,
+    DateTime? startDate,
   }) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
@@ -223,24 +103,23 @@ class LoanProvider extends ChangeNotifier {
     try {
       _setLoading(true);
       _setError(null);
-      final now = DateTime.now();
+
+      final loanId = DateTime.now().millisecondsSinceEpoch.toString();
+      final loanStartDate = startDate ?? DateTime.now();
 
       final loanData = {
-        'id': DateTime.now().millisecondsSinceEpoch.toString(), // Generate ID
+        'id': loanId,
         'name': title,
         'totalAmount': amount,
         'monthlyPayment': monthlyInstallment,
-        'totalMonths':
-            remainingMonths, // Assuming totalMonths = remainingMonths for new loan
-        'startDate': now.toIso8601String(),
+        'totalMonths': totalMonths,
+        'startDate': loanStartDate.toIso8601String(),
       };
 
-      // Append to emiLoans array in user doc
       await FirebaseFirestore.instance.collection('users').doc(uid).update({
         'emiLoans': FieldValue.arrayUnion([loanData]),
       });
 
-      // Reload loans to reflect changes
       await loadLoans();
       return true;
     } catch (e) {
@@ -251,7 +130,7 @@ class LoanProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> updateLoan(Loan updatedLoan) async {
+  Future<bool> updateLoan(LoanModel updatedLoan) async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) {
       _setError('Unauthorized to update this loan');
@@ -262,11 +141,11 @@ class LoanProvider extends ChangeNotifier {
       _setLoading(true);
       _setError(null);
 
-      // Fetch current array, update the matching loan, set new array
       final userDoc =
           await FirebaseFirestore.instance.collection('users').doc(uid).get();
-      final emiLoansArray =
-          List<Map<String, dynamic>>.from(userDoc.data()?['emiLoans'] ?? []);
+      final userData = userDoc.data() as Map<String, dynamic>?;
+      final emiLoansArray = List<Map<String, dynamic>>.from(
+          userData?['emiLoans'] as List<dynamic>? ?? []);
 
       final index = emiLoansArray
           .indexWhere((loanMap) => loanMap['id'] == updatedLoan.id);
@@ -275,13 +154,19 @@ class LoanProvider extends ChangeNotifier {
         return false;
       }
 
-      emiLoansArray[index] = updatedLoan.toFirestore();
+      emiLoansArray[index] = {
+        'id': updatedLoan.id,
+        'name': updatedLoan.name,
+        'totalAmount': updatedLoan.totalAmount,
+        'monthlyPayment': updatedLoan.emiAmount,
+        'totalMonths': updatedLoan.tenureMonths,
+        'startDate': updatedLoan.startDate.toIso8601String(),
+      };
 
       await FirebaseFirestore.instance.collection('users').doc(uid).update({
         'emiLoans': emiLoansArray,
       });
 
-      // Reload loans to reflect changes
       await loadLoans();
       return true;
     } catch (e) {
@@ -303,11 +188,11 @@ class LoanProvider extends ChangeNotifier {
       _setLoading(true);
       _setError(null);
 
-      // Fetch current array, remove the matching loan, set new array
       final userDoc =
           await FirebaseFirestore.instance.collection('users').doc(uid).get();
-      final emiLoansArray =
-          List<Map<String, dynamic>>.from(userDoc.data()?['emiLoans'] ?? []);
+      final userData = userDoc.data() as Map<String, dynamic>?;
+      final emiLoansArray = List<Map<String, dynamic>>.from(
+          userData?['emiLoans'] as List<dynamic>? ?? []);
 
       emiLoansArray.removeWhere((loanMap) => loanMap['id'] == loanId);
 
@@ -315,7 +200,6 @@ class LoanProvider extends ChangeNotifier {
         'emiLoans': emiLoansArray,
       });
 
-      // Reload loans to reflect changes
       await loadLoans();
       return true;
     } catch (e) {
@@ -344,21 +228,13 @@ class LoanProvider extends ChangeNotifier {
       }
 
       final loan = _loans[loanIndex];
-      if (loan.userId != uid) {
-        _setError('Unauthorized to update this loan');
-        return false;
-      }
 
-      // Calculate new remaining
-      final currentRemaining = loan.totalRemaining;
-      final newRemaining =
-          (currentRemaining - paymentAmount).clamp(0.0, double.infinity);
-      final newRemainingMonths = loan.monthlyInstallment > 0
-          ? (newRemaining / loan.monthlyInstallment).ceil()
-          : 0;
+      final monthsToReduce = (paymentAmount / loan.emiAmount).floor();
+      final newTenureMonths =
+          (loan.tenureMonths - monthsToReduce).clamp(0, loan.tenureMonths);
 
       final updatedLoan = loan.copyWith(
-        remainingMonths: newRemainingMonths,
+        tenureMonths: newTenureMonths,
         updatedAt: DateTime.now(),
       );
 
@@ -372,9 +248,37 @@ class LoanProvider extends ChangeNotifier {
     }
   }
 
+  // Helper methods for safe parsing
+  double _parseDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0.0;
+    return 0.0;
+  }
+
+  int _parseInt(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
+  }
+
+  DateTime _parseDate(dynamic value) {
+    if (value == null) return DateTime.now();
+    if (value is String) {
+      return DateTime.tryParse(value) ?? DateTime.now();
+    }
+    if (value is Timestamp) {
+      return value.toDate();
+    }
+    return DateTime.now();
+  }
+
   void _setLoading(bool loading) {
     _isLoading = loading;
-    if (!loading) notifyListeners();
+    notifyListeners();
   }
 
   void _setError(String? error) {
