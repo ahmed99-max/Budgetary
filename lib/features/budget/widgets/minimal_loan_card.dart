@@ -1,3 +1,5 @@
+// lib/features/budget/widgets/minimal_loan_card.dart
+
 import 'package:budgetary/features/loan/models/loan_model.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
