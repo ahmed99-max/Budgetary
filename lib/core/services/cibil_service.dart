@@ -26,10 +26,10 @@ class CibilService {
       // For demo purposes, generating mock data
       // Replace this with actual API call
       await Future.delayed(const Duration(seconds: 2)); // Simulate API delay
-      
+
       final random = Random();
       final score = 650 + random.nextInt(250); // Random score between 650-900
-      
+
       return CibilScore(
         score: score,
         reportDate: DateTime.now(),
@@ -53,7 +53,8 @@ class CibilService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('cibil_score', jsonEncode(score.toJson()));
-      await prefs.setString('cibil_last_updated', DateTime.now().toIso8601String());
+      await prefs.setString(
+          'cibil_last_updated', DateTime.now().toIso8601String());
     } catch (e) {
       debugPrint('Error saving CIBIL score: $e');
     }
@@ -76,7 +77,7 @@ class CibilService {
     try {
       // Mock pre-approved loans based on CIBIL score
       await Future.delayed(const Duration(seconds: 1));
-      
+
       final loans = <LoanOffer>[];
       final random = Random();
 
@@ -132,7 +133,7 @@ class CibilService {
     try {
       // Mock available loans
       await Future.delayed(const Duration(seconds: 1));
-      
+
       return [
         LoanOffer(
           id: 'loan_4',

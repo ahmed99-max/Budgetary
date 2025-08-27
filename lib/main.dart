@@ -1,8 +1,8 @@
 // lib/main.dart
 
+import 'package:budgetary/core/services/payment_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
-import 'package:budgetary/services/payment_service.dart';
 import 'package:budgetary/screens/home/home_screen.dart';
 import 'package:budgetary/screens/payments/payments_screen.dart';
 import 'package:budgetary/screens/loans/loans_screen.dart';
@@ -54,10 +54,10 @@ class _MainScreenState extends State<MainScreen> {
 
   final List<Widget> _screens = [
     const HomeScreen(),
-    const PaymentsScreen(), // New Payments screen replacing expenses
+    const PaymentsScreen(), // New Payments screen (merged with expenses)
     const LoansScreen(), // New Loans screen
-    const BudgetScreen(), // Existing budget screen (keeping existing functionality)
-    const ProfileScreen(), // Existing profile screen
+    const BudgetScreen(), // Existing budget screen (unchanged)
+    const ProfileScreen(), // Existing profile screen (unchanged)
   ];
 
   @override

@@ -204,7 +204,6 @@ class _ExpenseTrendChartState extends State<ExpenseTrendChart> {
                 }
               },
               touchTooltipData: LineTouchTooltipData(
-                tooltipBgColor: Colors.white.withOpacity(0.95),
                 tooltipRoundedRadius: 12.r,
                 tooltipPadding:
                     EdgeInsets.symmetric(horizontal: 12.w, vertical: 8.h),

@@ -65,7 +65,6 @@ class CategoryBreakdownChart extends StatelessWidget {
                 barTouchData: BarTouchData(
                   enabled: true, // Enhanced: Enable touch for tooltips
                   touchTooltipData: BarTouchTooltipData(
-                    tooltipBgColor: Colors.white.withOpacity(0.8),
                     getTooltipItem: (group, groupIndex, rod, rodIndex) {
                       final category = sortedExpenses[group.x.toInt()].key;
                       final value = rod.toY;
